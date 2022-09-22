@@ -1,0 +1,22 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: lint
+      - task: tests
+
+  lint:
+    cmds:
+      - golangci-lint run -v --fix
+
+  tests:
+    cmds:
+      - go test -race -coverpkg ./... -coverprofile coverage.out ./...
+
+  install:lint:
+    cmds:
+      - >
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh |
+        sh -s -- -b $(go env GOPATH)/bin latest
+
