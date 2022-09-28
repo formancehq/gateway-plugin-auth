@@ -3,12 +3,14 @@ package gateway_plugin_auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/zitadel/oidc/pkg/client"
+	"github.com/zitadel/oidc/pkg/client/rp"
 	"github.com/zitadel/oidc/pkg/oidc"
+	"github.com/zitadel/oidc/pkg/op"
 )
 
 type Config struct {
@@ -40,19 +42,26 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (a *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	spew.Dump(r)
 	token, err := getBearerToken(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	// DISCOVERY
-	discoveryConfig, err := client.Discover(a.issuer, http.DefaultClient)
+	c := http.DefaultClient
+	discoveryConfig, err := client.Discover(a.issuer, c)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	fmt.Printf("discovery config: %+v, token: %s\n", discoveryConfig, token)
+
+	remotePublicKeys := rp.NewRemoteKeySet(c, discoveryConfig.JwksURI)
+	accessTokenVerifier := op.NewAccessTokenVerifier(a.issuer, remotePublicKeys)
+	if _, err := op.VerifyAccessToken(r.Context(), token, accessTokenVerifier); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 
 	a.next.ServeHTTP(w, r)
 }
