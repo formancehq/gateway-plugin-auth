@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/zitadel/oidc/pkg/client"
-	"github.com/zitadel/oidc/pkg/client/rs"
 	"github.com/zitadel/oidc/pkg/oidc"
 )
 
@@ -42,14 +40,9 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (a *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("authorization")
-	if authHeader == "" {
-		http.Error(w, "auth header missing", http.StatusUnauthorized)
-		return
-	}
-
-	if !strings.HasPrefix(authHeader, oidc.PrefixBearer) {
-		http.Error(w, "invalid auth header", http.StatusUnauthorized)
+	token, err := getBearerToken(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -59,30 +52,29 @@ func (a *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	fmt.Printf("discovery config: %+v\n", discoveryConfig)
-
-	clientID := os.Getenv("CLIENT_ID")
-	clientSecret := os.Getenv("CLIENT_SECRET")
-	res, err := rs.NewResourceServerClientCredentials(a.issuer, clientID, clientSecret)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	// INTROSPECTION
-	token := strings.TrimPrefix(authHeader, oidc.PrefixBearer)
-	resp, err := rs.Introspect(r.Context(), res, token)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	fmt.Printf("CLAIMS: %+v\n", resp.GetClaims())
-
-	if !resp.IsActive() {
-		http.Error(w, "inactive token", http.StatusUnauthorized)
-		return
-	}
+	fmt.Printf("discovery config: %+v, token: %s\n", discoveryConfig, token)
 
 	a.next.ServeHTTP(w, r)
+}
+
+var (
+	ErrMissingAuthHeader   = errors.New("missing authorization header")
+	ErrMalformedAuthHeader = errors.New("malformed authorization header")
+)
+
+func getBearerToken(r *http.Request) (string, error) {
+	authHeader := r.Header.Get("authorization")
+	if authHeader == "" {
+		return "", ErrMissingAuthHeader
+	}
+
+	if !strings.HasPrefix(authHeader, strings.ToLower(oidc.PrefixBearer)) &&
+		!strings.HasPrefix(authHeader, oidc.PrefixBearer) {
+		return "", ErrMalformedAuthHeader
+	}
+
+	token := strings.TrimPrefix(authHeader, strings.ToLower(oidc.PrefixBearer))
+	token = strings.TrimPrefix(token, oidc.PrefixBearer)
+
+	return token, nil
 }
