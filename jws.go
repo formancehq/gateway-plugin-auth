@@ -3,6 +3,7 @@ package gateway_plugin_auth
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -67,14 +68,6 @@ func ParseSigned(signature string) (*JSONWebSignature, error) {
 	return parseSignedCompact(signature, nil)
 }
 
-// ParseDetached parses a signed message in compact serialization format with detached payload.
-func ParseDetached(signature string, payload []byte) (*JSONWebSignature, error) {
-	if payload == nil {
-		return nil, errors.New("square/go-jose: nil payload")
-	}
-	return parseSignedCompact(stripWhitespace(signature), payload)
-}
-
 // Get a header value
 func (sig Signature) mergedHeaders() rawHeader {
 	out := rawHeader{}
@@ -90,7 +83,7 @@ func (obj JSONWebSignature) computeAuthData(payload []byte, signature *Signature
 	protectedHeader := new(rawHeader)
 
 	if signature.original != nil && signature.original.Protected != nil {
-		if err := Unmarshal(signature.original.Protected.bytes(), protectedHeader); err != nil {
+		if err := json.Unmarshal(signature.original.Protected.bytes(), protectedHeader); err != nil {
 			return nil, err
 		}
 		authData.WriteString(signature.original.Protected.base64())
@@ -122,7 +115,7 @@ func (obj JSONWebSignature) computeAuthData(payload []byte, signature *Signature
 // parseSignedFull parses a message in full format.
 func parseSignedFull(input string) (*JSONWebSignature, error) {
 	var parsed rawJSONWebSignature
-	err := Unmarshal([]byte(input), &parsed)
+	err := json.Unmarshal([]byte(input), &parsed)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +139,7 @@ func (parsed *rawJSONWebSignature) sanitized() (*JSONWebSignature, error) {
 		signature := Signature{}
 		if parsed.Protected != nil && len(parsed.Protected.bytes()) > 0 {
 			signature.protected = &rawHeader{}
-			err := Unmarshal(parsed.Protected.bytes(), signature.protected)
+			err := json.Unmarshal(parsed.Protected.bytes(), signature.protected)
 			if err != nil {
 				return nil, err
 			}
@@ -206,7 +199,7 @@ func (parsed *rawJSONWebSignature) sanitized() (*JSONWebSignature, error) {
 	for i, sig := range parsed.Signatures {
 		if sig.Protected != nil && len(sig.Protected.bytes()) > 0 {
 			obj.Signatures[i].protected = &rawHeader{}
-			err := Unmarshal(sig.Protected.bytes(), obj.Signatures[i].protected)
+			err := json.Unmarshal(sig.Protected.bytes(), obj.Signatures[i].protected)
 			if err != nil {
 				return nil, err
 			}

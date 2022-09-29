@@ -2,8 +2,8 @@ package gateway_plugin_auth
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // rawJSONWebEncryption represents a raw JWE JSON object. Used for parsing/serializing.
@@ -85,27 +85,6 @@ func (obj JSONWebEncryption) computeAuthData() []byte {
 	return output
 }
 
-// ParseEncrypted parses an encrypted message in compact or full serialization format.
-func ParseEncrypted(input string) (*JSONWebEncryption, error) {
-	input = stripWhitespace(input)
-	if strings.HasPrefix(input, "{") {
-		return parseEncryptedFull(input)
-	}
-
-	return parseEncryptedCompact(input)
-}
-
-// parseEncryptedFull parses a message in compact format.
-func parseEncryptedFull(input string) (*JSONWebEncryption, error) {
-	var parsed rawJSONWebEncryption
-	err := Unmarshal([]byte(input), &parsed)
-	if err != nil {
-		return nil, err
-	}
-
-	return parsed.sanitized()
-}
-
 // sanitized produces a cleaned-up JWE object from the raw JSON.
 func (parsed *rawJSONWebEncryption) sanitized() (*JSONWebEncryption, error) {
 	obj := &JSONWebEncryption{
@@ -126,7 +105,7 @@ func (parsed *rawJSONWebEncryption) sanitized() (*JSONWebEncryption, error) {
 	}
 
 	if parsed.Protected != nil && len(parsed.Protected.bytes()) > 0 {
-		err := Unmarshal(parsed.Protected.bytes(), &obj.protected)
+		err := json.Unmarshal(parsed.Protected.bytes(), &obj.protected)
 		if err != nil {
 			return nil, fmt.Errorf("square/go-jose: invalid protected header: %s, %s", err, parsed.Protected.base64())
 		}
@@ -179,49 +158,6 @@ func (parsed *rawJSONWebEncryption) sanitized() (*JSONWebEncryption, error) {
 	obj.aad = parsed.Aad.bytes()
 
 	return obj, nil
-}
-
-// parseEncryptedCompact parses a message in compact format.
-func parseEncryptedCompact(input string) (*JSONWebEncryption, error) {
-	parts := strings.Split(input, ".")
-	if len(parts) != 5 {
-		return nil, fmt.Errorf("square/go-jose: compact JWE format must have five parts")
-	}
-
-	rawProtected, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return nil, err
-	}
-
-	encryptedKey, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, err
-	}
-
-	iv, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return nil, err
-	}
-
-	ciphertext, err := base64.RawURLEncoding.DecodeString(parts[3])
-	if err != nil {
-		return nil, err
-	}
-
-	tag, err := base64.RawURLEncoding.DecodeString(parts[4])
-	if err != nil {
-		return nil, err
-	}
-
-	raw := &rawJSONWebEncryption{
-		Protected:    newBuffer(rawProtected),
-		EncryptedKey: newBuffer(encryptedKey),
-		Iv:           newBuffer(iv),
-		Ciphertext:   newBuffer(ciphertext),
-		Tag:          newBuffer(tag),
-	}
-
-	return raw.sanitized()
 }
 
 // CompactSerialize serializes an object using the compact serialization format.

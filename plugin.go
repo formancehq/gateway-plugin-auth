@@ -2,6 +2,7 @@ package gateway_plugin_auth
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -51,7 +52,8 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := http.DefaultClient
 	discoveryConfig, err := Discover(p.issuer, c)
 	if err != nil {
-		http.Error(w, errors.Wrap(err, ErrDiscoveryEndpoint).Error(), http.StatusUnauthorized)
+		http.Error(w, errors.Wrap(err,
+			fmt.Sprintf("%s, issuer:%s", ErrDiscoveryEndpoint, p.issuer)).Error(), http.StatusUnauthorized)
 		return
 	}
 

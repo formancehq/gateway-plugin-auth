@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -140,13 +141,13 @@ func (k JSONWebKey) MarshalJSON() ([]byte, error) {
 
 	raw.X5u = k.CertificatesURL
 
-	return Marshal(raw)
+	return json.Marshal(raw)
 }
 
 // UnmarshalJSON reads a key from its JSON representation.
 func (k *JSONWebKey) UnmarshalJSON(data []byte) (err error) {
 	var raw rawJSONWebKey
-	err = Unmarshal(data, &raw)
+	err = json.Unmarshal(data, &raw)
 	if err != nil {
 		return err
 	}

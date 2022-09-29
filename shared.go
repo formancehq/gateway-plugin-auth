@@ -4,6 +4,7 @@ import (
 	"crypto/elliptic"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -185,7 +186,7 @@ func (h Header) Certificates(opts x509.VerifyOptions) ([][]*x509.Certificate, er
 }
 
 func (parsed rawHeader) set(k HeaderKey, v interface{}) error {
-	b, err := Marshal(v)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
@@ -201,7 +202,7 @@ func (parsed rawHeader) getString(k HeaderKey) string {
 		return ""
 	}
 	var s string
-	err := Unmarshal(*v, &s)
+	err := json.Unmarshal(*v, &s)
 	if err != nil {
 		return ""
 	}
@@ -216,7 +217,7 @@ func (parsed rawHeader) getByteBuffer(k HeaderKey) (*byteBuffer, error) {
 		return nil, nil
 	}
 	var bb *byteBuffer
-	err := Unmarshal(*v, &bb)
+	err := json.Unmarshal(*v, &bb)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +255,7 @@ func (parsed rawHeader) getEPK() (*JSONWebKey, error) {
 		return nil, nil
 	}
 	var epk *JSONWebKey
-	err := Unmarshal(*v, &epk)
+	err := json.Unmarshal(*v, &epk)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +291,7 @@ func (parsed rawHeader) getCritical() ([]string, error) {
 	}
 
 	var q []string
-	err := Unmarshal(*v, &q)
+	err := json.Unmarshal(*v, &q)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +306,7 @@ func (parsed rawHeader) getP2C() (int, error) {
 	}
 
 	var p2c int
-	err := Unmarshal(*v, &p2c)
+	err := json.Unmarshal(*v, &p2c)
 	if err != nil {
 		return 0, err
 	}
@@ -325,7 +326,7 @@ func (parsed rawHeader) getB64() (bool, error) {
 	}
 
 	var b64 bool
-	err := Unmarshal(*v, &b64)
+	err := json.Unmarshal(*v, &b64)
 	if err != nil {
 		return true, err
 	}
@@ -341,7 +342,7 @@ func (parsed rawHeader) sanitized() (h Header, err error) {
 		switch k {
 		case headerJWK:
 			var jwk *JSONWebKey
-			err = Unmarshal(*v, &jwk)
+			err = json.Unmarshal(*v, &jwk)
 			if err != nil {
 				err = fmt.Errorf("failed to unmarshal JWK: %v: %#v", err, string(*v))
 				return
@@ -349,7 +350,7 @@ func (parsed rawHeader) sanitized() (h Header, err error) {
 			h.JSONWebKey = jwk
 		case headerKeyID:
 			var s string
-			err = Unmarshal(*v, &s)
+			err = json.Unmarshal(*v, &s)
 			if err != nil {
 				err = fmt.Errorf("failed to unmarshal key ID: %v: %#v", err, string(*v))
 				return
@@ -357,7 +358,7 @@ func (parsed rawHeader) sanitized() (h Header, err error) {
 			h.KeyID = s
 		case headerAlgorithm:
 			var s string
-			err = Unmarshal(*v, &s)
+			err = json.Unmarshal(*v, &s)
 			if err != nil {
 				err = fmt.Errorf("failed to unmarshal algorithm: %v: %#v", err, string(*v))
 				return
@@ -365,7 +366,7 @@ func (parsed rawHeader) sanitized() (h Header, err error) {
 			h.Algorithm = s
 		case headerNonce:
 			var s string
-			err = Unmarshal(*v, &s)
+			err = json.Unmarshal(*v, &s)
 			if err != nil {
 				err = fmt.Errorf("failed to unmarshal nonce: %v: %#v", err, string(*v))
 				return
@@ -373,7 +374,7 @@ func (parsed rawHeader) sanitized() (h Header, err error) {
 			h.Nonce = s
 		case headerX5c:
 			c := []string{}
-			err = Unmarshal(*v, &c)
+			err = json.Unmarshal(*v, &c)
 			if err != nil {
 				err = fmt.Errorf("failed to unmarshal x5c header: %v: %#v", err, string(*v))
 				return
@@ -388,7 +389,7 @@ func (parsed rawHeader) sanitized() (h Header, err error) {
 				h.ExtraHeaders = map[HeaderKey]interface{}{}
 			}
 			var v2 interface{}
-			err = Unmarshal(*v, &v2)
+			err = json.Unmarshal(*v, &v2)
 			if err != nil {
 				err = fmt.Errorf("failed to unmarshal value: %v: %#v", err, string(*v))
 				return
@@ -421,7 +422,7 @@ func (dst rawHeader) isSet(k HeaderKey) bool {
 	}
 
 	var dv interface{}
-	err := Unmarshal(*dvr, &dv)
+	err := json.Unmarshal(*dvr, &dv)
 	if err != nil {
 		return true
 	}

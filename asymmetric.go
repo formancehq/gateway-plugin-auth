@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -335,7 +336,7 @@ func (ctx ecKeyGenerator) genKey() ([]byte, rawHeader, error) {
 
 	out := DeriveECDHES(ctx.algID, []byte{}, []byte{}, priv, ctx.publicKey, ctx.size)
 
-	b, err := Marshal(&JSONWebKey{
+	b, err := json.Marshal(&JSONWebKey{
 		Key: &priv.PublicKey,
 	})
 	if err != nil {

@@ -10,13 +10,6 @@ linters:
     - ineffassign
     - staticcheck
     - unparam
-
-  presets:
-  #  - bugs
-  #  - comment
-  #  - error
-  #  - format
-  #  - import
     - unused
 
 run:

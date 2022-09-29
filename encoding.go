@@ -5,6 +5,7 @@ import (
 	"compress/flate"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"math/big"
 	"strings"
@@ -14,7 +15,7 @@ import (
 // Helper function to serialize known-good objects.
 // Precondition: value is not a nil pointer.
 func mustSerializeJSON(value interface{}) []byte {
-	out, err := Marshal(value)
+	out, err := json.Marshal(value)
 	if err != nil {
 		panic(err)
 	}
@@ -100,12 +101,12 @@ func newBufferFromInt(num uint64) *byteBuffer {
 }
 
 func (b *byteBuffer) MarshalJSON() ([]byte, error) {
-	return Marshal(b.base64())
+	return json.Marshal(b.base64())
 }
 
 func (b *byteBuffer) UnmarshalJSON(data []byte) error {
 	var encoded string
-	err := Unmarshal(data, &encoded)
+	err := json.Unmarshal(data, &encoded)
 	if err != nil {
 		return err
 	}
