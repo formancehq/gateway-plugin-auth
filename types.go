@@ -1,6 +1,13 @@
 package gateway_plugin_auth
 
-/*
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+)
+
 type Audience []string
 
 func (a *Audience) UnmarshalJSON(text []byte) error {
@@ -21,37 +28,7 @@ func (a *Audience) UnmarshalJSON(text []byte) error {
 	return nil
 }
 
-type Display string
-
-func (d *Display) UnmarshalText(text []byte) error {
-	display := Display(text)
-	switch display {
-	case DisplayPage, DisplayPopup, DisplayTouch, DisplayWAP:
-		*d = display
-	}
-	return nil
-}
-
-type Gender string
-
-type Locales []language.Tag
-
-func (l *Locales) UnmarshalText(text []byte) error {
-	locales := strings.Split(string(text), " ")
-	for _, locale := range locales {
-		tag, err := language.Parse(locale)
-		if err == nil && !tag.IsRoot() {
-			*l = append(*l, tag)
-		}
-	}
-	return nil
-}
-
 type MaxAge *uint
-
-func NewMaxAge(i uint) MaxAge {
-	return &i
-}
 
 type SpaceDelimitedArray []string
 
@@ -139,7 +116,3 @@ type RequestObject struct {
 func (r *RequestObject) GetIssuer() string {
 	return r.Issuer
 }
-
-func (r *RequestObject) SetSignatureAlgorithm(algorithm jose.SignatureAlgorithm) {
-}
-*/

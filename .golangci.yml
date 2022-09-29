@@ -4,6 +4,13 @@ linters:
     - gci
     - goimports
 
+  disable:
+    - errcheck
+    - gosimple
+    - ineffassign
+    - staticcheck
+    - unparam
+
   presets:
   #  - bugs
   #  - comment

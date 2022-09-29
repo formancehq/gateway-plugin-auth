@@ -6,8 +6,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rsa"
 	"errors"
-
-	"gopkg.in/square/go-jose.v2"
 )
 
 const (
@@ -25,11 +23,11 @@ var (
 // - dynamically aggregated by request for OAuth JWT Profile Assertion -> `jwtProfileKeySet`.
 type KeySet interface {
 	// VerifySignature verifies the signature with the given keyset and returns the raw payload
-	VerifySignature(ctx context.Context, jws *jose.JSONWebSignature) (payload []byte, err error)
+	VerifySignature(ctx context.Context, jws *JSONWebSignature) (payload []byte, err error)
 }
 
 // GetKeyIDAndAlg returns the `kid` and `alg` claim from the JWS header.
-func GetKeyIDAndAlg(jws *jose.JSONWebSignature) (string, string) {
+func GetKeyIDAndAlg(jws *JSONWebSignature) (string, string) {
 	keyID := ""
 	alg := ""
 	for _, sig := range jws.Signatures {
@@ -40,26 +38,13 @@ func GetKeyIDAndAlg(jws *jose.JSONWebSignature) (string, string) {
 	return keyID, alg
 }
 
-// FindKey searches the given JSON Web Keys for the requested key ID, usage and key type
-//
-// will return the key immediately if matches exact (id, usage, type)
-//
-// will return false none or multiple match
-//
-// deprecated: use FindMatchingKey which will return an error (more specific) instead of just a bool
-// moved implementation already to FindMatchingKey
-func FindKey(keyID, use, expectedAlg string, keys ...jose.JSONWebKey) (jose.JSONWebKey, bool) {
-	key, err := FindMatchingKey(keyID, use, expectedAlg, keys...)
-	return key, err == nil
-}
-
 // FindMatchingKey searches the given JSON Web Keys for the requested key ID, usage and alg type
 //
 // will return the key immediately if matches exact (id, usage, type)
 //
 // will return a specific error if none (ErrKeyNone) or multiple (ErrKeyMultiple) match.
-func FindMatchingKey(keyID, use, expectedAlg string, keys ...jose.JSONWebKey) (key jose.JSONWebKey, err error) {
-	var validKeys []jose.JSONWebKey
+func FindMatchingKey(keyID, use, expectedAlg string, keys ...JSONWebKey) (key JSONWebKey, err error) {
+	var validKeys []JSONWebKey
 	for _, k := range keys {
 		// ignore all keys with wrong use (let empty use of published key pass)
 		if k.Use != use && k.Use != "" {

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"gopkg.in/square/go-jose.v2"
 )
 
 const (
@@ -14,29 +12,7 @@ const (
 
 	//GrantTypeRefreshToken defines the grant_type `refresh_token` used for the Token Request in the Refresh Token Flow.
 	GrantTypeRefreshToken GrantType = "refresh_token"
-
-	//GrantTypeClientCredentials defines the grant_type `client_credentials` used for the Token Request in the Client Credentials Token Flow.
-	GrantTypeClientCredentials GrantType = "client_credentials"
-
-	//GrantTypeBearer defines the grant_type `urn:ietf:params:oauth:grant-type:jwt-bearer` used for the JWT Authorization Grant.
-	GrantTypeBearer GrantType = "urn:ietf:params:oauth:grant-type:jwt-bearer"
-
-	//GrantTypeTokenExchange defines the grant_type `urn:ietf:params:oauth:grant-type:token-exchange` used for the OAuth Token Exchange Grant.
-	GrantTypeTokenExchange GrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
-
-	//GrantTypeImplicit defines the grant type `implicit` used for implicit flows that skip the generation and exchange of an Authorization Code.
-	GrantTypeImplicit GrantType = "implicit"
-
-	// ClientAssertionTypeJWTAssertion defines the client_assertion_type `urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
-	// used for the OAuth JWT Profile Client Authentication
-	ClientAssertionTypeJWTAssertion = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 )
-
-var AllGrantTypes = []GrantType{
-	GrantTypeCode, GrantTypeRefreshToken, GrantTypeClientCredentials,
-	GrantTypeBearer, GrantTypeTokenExchange, GrantTypeImplicit,
-	ClientAssertionTypeJWTAssertion,
-}
 
 type GrantType string
 
@@ -188,7 +164,7 @@ func (j *JWTTokenRequest) GetAuthorizedParty() string {
 }
 
 // SetSignatureAlgorithm implements the Claims interface.
-func (j *JWTTokenRequest) SetSignatureAlgorithm(_ jose.SignatureAlgorithm) {}
+func (j *JWTTokenRequest) SetSignatureAlgorithm(_ SignatureAlgorithm) {}
 
 // GetSubject implements the TokenRequest interface.
 func (j *JWTTokenRequest) GetSubject() string {
