@@ -19,6 +19,6 @@ jobs:
   install:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -sfL https://raw.githubusercontent.com/traefik/yaegi/master/install.sh | bash -s -- -b $GOPATH/bin latest
+      - run: curl -sfL https://raw.githubusercontent.com/traefik/yaegi/master/install.sh | sudo bash -s -- -b $GOPATH/bin latest
   test:
     uses: formancehq/gh-workflows/.github/workflows/golang-test.yml@main
