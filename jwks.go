@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-
-	"gopkg.in/square/go-jose.v2"
 )
 
 func NewRemoteKeySet(client *http.Client, jwksURL string, opts ...func(*remoteKeySet)) KeySet {
@@ -32,14 +30,14 @@ type remoteKeySet struct {
 	inflight *inflight
 
 	// A set of cached keys and their expiry.
-	cachedKeys []jose.JSONWebKey
+	cachedKeys []JSONWebKey
 }
 
 // inflight is used to wait on some in-flight request from multiple goroutines.
 type inflight struct {
 	doneCh chan struct{}
 
-	keys []jose.JSONWebKey
+	keys []JSONWebKey
 	err  error
 }
 
@@ -56,18 +54,18 @@ func (i *inflight) wait() <-chan struct{} {
 // done can only be called by a single goroutine. It records the result of the
 // inflight request and signals other goroutines that the result is safe to
 // inspect.
-func (i *inflight) done(keys []jose.JSONWebKey, err error) {
+func (i *inflight) done(keys []JSONWebKey, err error) {
 	i.keys = keys
 	i.err = err
 	close(i.doneCh)
 }
 
 // result cannot be called until the wait() channel has returned a value.
-func (i *inflight) result() ([]jose.JSONWebKey, error) {
+func (i *inflight) result() ([]JSONWebKey, error) {
 	return i.keys, i.err
 }
 
-func (r *remoteKeySet) VerifySignature(ctx context.Context, jws *jose.JSONWebSignature) ([]byte, error) {
+func (r *remoteKeySet) VerifySignature(ctx context.Context, jws *JSONWebSignature) ([]byte, error) {
 	keyID, alg := GetKeyIDAndAlg(jws)
 	if alg == "" {
 		alg = r.defaultAlg
@@ -91,7 +89,7 @@ func (r *remoteKeySet) VerifySignature(ctx context.Context, jws *jose.JSONWebSig
 // - or both (JWT and JWK) kid are equal
 //
 // otherwise it will return no error (so remote keys will be loaded)
-func (r *remoteKeySet) verifySignatureCached(jws *jose.JSONWebSignature, keyID, alg string) ([]byte, error) {
+func (r *remoteKeySet) verifySignatureCached(jws *JSONWebSignature, keyID, alg string) ([]byte, error) {
 	keys := r.keysFromCache()
 	if len(keys) == 0 {
 		return nil, nil
@@ -119,7 +117,7 @@ func (r *remoteKeySet) exactMatch(jwkID, jwsID string) bool {
 	return jwkID == jwsID
 }
 
-func (r *remoteKeySet) verifySignatureRemote(ctx context.Context, jws *jose.JSONWebSignature, keyID, alg string) ([]byte, error) {
+func (r *remoteKeySet) verifySignatureRemote(ctx context.Context, jws *JSONWebSignature, keyID, alg string) ([]byte, error) {
 	keys, err := r.keysFromRemote(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch key for signature validation: %w", err)
@@ -135,7 +133,7 @@ func (r *remoteKeySet) verifySignatureRemote(ctx context.Context, jws *jose.JSON
 	return payload, nil
 }
 
-func (r *remoteKeySet) keysFromCache() (keys []jose.JSONWebKey) {
+func (r *remoteKeySet) keysFromCache() (keys []JSONWebKey) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.cachedKeys
@@ -143,7 +141,7 @@ func (r *remoteKeySet) keysFromCache() (keys []jose.JSONWebKey) {
 
 // keysFromRemote syncs the key set from the remote set, records the values in the
 // cache, and returns the key set.
-func (r *remoteKeySet) keysFromRemote(ctx context.Context) ([]jose.JSONWebKey, error) {
+func (r *remoteKeySet) keysFromRemote(ctx context.Context) ([]JSONWebKey, error) {
 	// Need to lock to inspect the inflight request field.
 	r.mu.Lock()
 	// If there's not a current inflight request, create one.
@@ -185,7 +183,7 @@ func (r *remoteKeySet) updateKeys(ctx context.Context) {
 	r.inflight = nil
 }
 
-func (r *remoteKeySet) fetchRemoteKeys(_ context.Context) ([]jose.JSONWebKey, error) {
+func (r *remoteKeySet) fetchRemoteKeys(_ context.Context) ([]JSONWebKey, error) {
 	req, err := http.NewRequest("GET", r.jwksURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("oidc: can't create request: %v", err)
@@ -198,10 +196,10 @@ func (r *remoteKeySet) fetchRemoteKeys(_ context.Context) ([]jose.JSONWebKey, er
 	return keySet.Keys, nil
 }
 
-// jsonWebKeySet is an alias for jose.JSONWebKeySet which ignores unknown key types (kty)
-type jsonWebKeySet jose.JSONWebKeySet
+// jsonWebKeySet is an alias for JSONWebKeySet which ignores unknown key types (kty)
+type jsonWebKeySet JSONWebKeySet
 
-// UnmarshalJSON overrides the default jose.JSONWebKeySet method to ignore any error
+// UnmarshalJSON overrides the default JSONWebKeySet method to ignore any error
 // which might occur because of unknown key types (kty)
 func (k *jsonWebKeySet) UnmarshalJSON(data []byte) (err error) {
 	var raw rawJSONWebKeySet
@@ -210,7 +208,7 @@ func (k *jsonWebKeySet) UnmarshalJSON(data []byte) (err error) {
 		return err
 	}
 	for _, key := range raw.Keys {
-		webKey := new(jose.JSONWebKey)
+		webKey := new(JSONWebKey)
 		err = webKey.UnmarshalJSON(key)
 		if err == nil {
 			k.Keys = append(k.Keys, *webKey)

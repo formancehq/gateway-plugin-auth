@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"gopkg.in/square/go-jose.v2"
 )
 
 const (
@@ -166,7 +164,7 @@ func (j *JWTTokenRequest) GetAuthorizedParty() string {
 }
 
 // SetSignatureAlgorithm implements the Claims interface.
-func (j *JWTTokenRequest) SetSignatureAlgorithm(_ jose.SignatureAlgorithm) {}
+func (j *JWTTokenRequest) SetSignatureAlgorithm(_ SignatureAlgorithm) {}
 
 // GetSubject implements the TokenRequest interface.
 func (j *JWTTokenRequest) GetSubject() string {

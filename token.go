@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
-	"gopkg.in/square/go-jose.v2"
 )
 
 const (
@@ -37,7 +36,7 @@ type IDTokenClaims interface {
 	GetCodeHash() string
 	GetAuthenticationMethodsReferences() []string
 	GetClientID() string
-	GetSignatureAlgorithm() jose.SignatureAlgorithm
+	GetSignatureAlgorithm() SignatureAlgorithm
 	SetAccessTokenHash(hash string)
 	SetCodeHash(hash string)
 }
@@ -65,8 +64,8 @@ type accessTokenClaims struct {
 	ClientID                            string   `json:"client_id,omitempty"`
 	AccessTokenUseNumber                int      `json:"at_use_nbr,omitempty"`
 
-	claims       map[string]interface{}  `json:"-"`
-	signatureAlg jose.SignatureAlgorithm `json:"-"`
+	claims       map[string]interface{} `json:"-"`
+	signatureAlg SignatureAlgorithm     `json:"-"`
 }
 
 // GetIssuer implements the Claims interface.
@@ -110,7 +109,7 @@ func (a *accessTokenClaims) GetAuthorizedParty() string {
 }
 
 // SetSignatureAlgorithm implements the Claims interface.
-func (a *accessTokenClaims) SetSignatureAlgorithm(algorithm jose.SignatureAlgorithm) {
+func (a *accessTokenClaims) SetSignatureAlgorithm(algorithm SignatureAlgorithm) {
 	a.signatureAlg = algorithm
 }
 

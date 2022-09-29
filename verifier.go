@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"gopkg.in/square/go-jose.v2"
 )
 
 type Claims interface {
@@ -27,7 +25,7 @@ type Claims interface {
 }
 
 type ClaimsSignature interface {
-	SetSignatureAlgorithm(algorithm jose.SignatureAlgorithm)
+	SetSignatureAlgorithm(algorithm SignatureAlgorithm)
 }
 
 var (
@@ -75,7 +73,7 @@ func CheckIssuer(claims Claims, issuer string) error {
 }
 
 func CheckSignature(ctx context.Context, token string, payload []byte, claims ClaimsSignature, supportedSigAlgs []string, set KeySet) error {
-	jws, err := jose.ParseSigned(token)
+	jws, err := ParseSigned(token)
 	if err != nil {
 		return ErrParse
 	}
