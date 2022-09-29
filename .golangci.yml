@@ -11,6 +11,7 @@ linters:
     - staticcheck
     - unparam
     - unused
+    - deadcode
 
 run:
   timeout: 5m

@@ -25,7 +25,8 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version-file: 'go.mod'
-          cache: true
+      - name: Prepare tests
+        run: go mod tidy && go mod vendor
       - name: Run tests
         run: task install:yaegi tests
       - name: Upload coverage to Codecov
