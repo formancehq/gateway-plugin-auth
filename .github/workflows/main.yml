@@ -1,0 +1,24 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [ assigned, opened, synchronize, reopened ]
+  release:
+    types: [ prereleased, released ]
+
+name: Main
+jobs:
+  pr-style:
+    if: github.event_name == 'pull_request'
+    uses: formancehq/gh-workflows/.github/workflows/pr-style.yml@main
+
+  lint:
+    uses: formancehq/gh-workflows/.github/workflows/golang-lint.yml@main
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -sfL https://raw.githubusercontent.com/traefik/yaegi/master/install.sh | bash -s -- -b $GOPATH/bin latest
+  test:
+    uses: formancehq/gh-workflows/.github/workflows/golang-test.yml@main
