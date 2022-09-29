@@ -1,30 +1,14 @@
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
-# github.com/felixge/httpsnoop v1.0.3
-## explicit; go 1.13
-github.com/felixge/httpsnoop
 # github.com/golang-jwt/jwt v3.2.2+incompatible
 ## explicit
 github.com/golang-jwt/jwt
 # github.com/golang/protobuf v1.5.2
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
-# github.com/google/uuid v1.3.0
-## explicit
-github.com/google/uuid
-# github.com/gorilla/handlers v1.5.1
-## explicit; go 1.14
-github.com/gorilla/handlers
-# github.com/gorilla/mux v1.8.0
+# github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e
 ## explicit; go 1.12
-github.com/gorilla/mux
-# github.com/gorilla/schema v1.2.0
-## explicit
-github.com/gorilla/schema
-# github.com/gorilla/securecookie v1.1.1
-## explicit
-github.com/gorilla/securecookie
 # github.com/oauth2-proxy/mockoidc v0.0.0-20220308204021-b9169deeb282
 ## explicit; go 1.16
 github.com/oauth2-proxy/mockoidc
@@ -34,31 +18,15 @@ github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/sirupsen/logrus v1.9.0
-## explicit; go 1.13
-github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.8.0
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/zitadel/logging v0.3.4
-## explicit; go 1.13
-github.com/zitadel/logging
-# github.com/zitadel/oidc v1.8.0
-## explicit; go 1.15
-github.com/zitadel/oidc/pkg/client
-github.com/zitadel/oidc/pkg/client/rp
-github.com/zitadel/oidc/pkg/crypto
-github.com/zitadel/oidc/pkg/http
-github.com/zitadel/oidc/pkg/oidc
-github.com/zitadel/oidc/pkg/oidc/grants/tokenexchange
-github.com/zitadel/oidc/pkg/op
-github.com/zitadel/oidc/pkg/strings
 # golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be
 ## explicit; go 1.17
 golang.org/x/crypto/ed25519
 golang.org/x/crypto/pbkdf2
-# golang.org/x/net v0.0.0-20220927171203-f486391704dc
+# golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e
 ## explicit; go 1.17
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -66,11 +34,6 @@ golang.org/x/net/context/ctxhttp
 ## explicit; go 1.17
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
-# golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec
-## explicit; go 1.17
-golang.org/x/sys/internal/unsafeheader
-golang.org/x/sys/unix
-golang.org/x/sys/windows
 # golang.org/x/text v0.3.7
 ## explicit; go 1.17
 golang.org/x/text/internal/language
@@ -86,7 +49,7 @@ google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/remote_api
 google.golang.org/appengine/internal/urlfetch
 google.golang.org/appengine/urlfetch
-# google.golang.org/protobuf v1.28.1
+# google.golang.org/protobuf v1.28.0
 ## explicit; go 1.11
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
@@ -115,6 +78,8 @@ google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
+# gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b
+## explicit
 # gopkg.in/square/go-jose.v2 v2.6.0
 ## explicit
 gopkg.in/square/go-jose.v2

@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/formancehq/gateway-plugin-auth/pkg/client"
+	"github.com/formancehq/gateway-plugin-auth/pkg/client/rp"
+	"github.com/formancehq/gateway-plugin-auth/pkg/oidc"
+	"github.com/formancehq/gateway-plugin-auth/pkg/op"
 	"github.com/pkg/errors"
-	"github.com/zitadel/oidc/pkg/client"
-	"github.com/zitadel/oidc/pkg/client/rp"
-	"github.com/zitadel/oidc/pkg/oidc"
-	"github.com/zitadel/oidc/pkg/op"
 )
 
 type Config struct {
