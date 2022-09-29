@@ -3,13 +3,14 @@ module github.com/formancehq/gateway-plugin-auth
 go 1.18
 
 require (
-	github.com/davecgh/go-spew v1.1.1
 	github.com/oauth2-proxy/mockoidc v0.0.0-20220308204021-b9169deeb282
+	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.0
 	github.com/zitadel/oidc v1.8.0
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/protobuf v1.5.2 // indirect

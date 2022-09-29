@@ -2,11 +2,10 @@ package gateway_plugin_auth
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
+	"github.com/pkg/errors"
 	"github.com/zitadel/oidc/pkg/client"
 	"github.com/zitadel/oidc/pkg/client/rp"
 	"github.com/zitadel/oidc/pkg/oidc"
@@ -29,7 +28,7 @@ type Plugin struct {
 
 var ErrEmptyIssuer = errors.New("issuer cannot be empty")
 
-func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
+func New(_ context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	if config.Issuer == "" {
 		return nil, ErrEmptyIssuer
 	}
@@ -41,8 +40,12 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 	}, nil
 }
 
-func (a *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	spew.Dump(r)
+var (
+	ErrDiscoveryEndpoint = "discovery endpoint"
+	ErrVerifyToken       = "verify token"
+)
+
+func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token, err := getBearerToken(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -50,20 +53,20 @@ func (a *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := http.DefaultClient
-	discoveryConfig, err := client.Discover(a.issuer, c)
+	discoveryConfig, err := client.Discover(p.issuer, c)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		http.Error(w, errors.Wrap(err, ErrDiscoveryEndpoint).Error(), http.StatusUnauthorized)
 		return
 	}
 
 	remotePublicKeys := rp.NewRemoteKeySet(c, discoveryConfig.JwksURI)
-	accessTokenVerifier := op.NewAccessTokenVerifier(a.issuer, remotePublicKeys)
+	accessTokenVerifier := op.NewAccessTokenVerifier(p.issuer, remotePublicKeys)
 	if _, err := op.VerifyAccessToken(r.Context(), token, accessTokenVerifier); err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		http.Error(w, errors.Wrap(err, ErrVerifyToken).Error(), http.StatusUnauthorized)
 		return
 	}
 
-	a.next.ServeHTTP(w, r)
+	p.next.ServeHTTP(w, r)
 }
 
 var (
@@ -84,6 +87,5 @@ func getBearerToken(r *http.Request) (string, error) {
 
 	token := strings.TrimPrefix(authHeader, strings.ToLower(oidc.PrefixBearer))
 	token = strings.TrimPrefix(token, oidc.PrefixBearer)
-
 	return token, nil
 }
