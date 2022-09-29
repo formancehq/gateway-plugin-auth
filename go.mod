@@ -7,7 +7,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.0
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
-	golang.org/x/text v0.3.7
 	gopkg.in/square/go-jose.v2 v2.6.0
 )
 

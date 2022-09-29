@@ -5,10 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/formancehq/gateway-plugin-auth/pkg/client"
-	"github.com/formancehq/gateway-plugin-auth/pkg/client/rp"
-	"github.com/formancehq/gateway-plugin-auth/pkg/oidc"
-	"github.com/formancehq/gateway-plugin-auth/pkg/op"
 	"github.com/pkg/errors"
 )
 
@@ -53,15 +49,15 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := http.DefaultClient
-	discoveryConfig, err := client.Discover(p.issuer, c)
+	discoveryConfig, err := Discover(p.issuer, c)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, ErrDiscoveryEndpoint).Error(), http.StatusUnauthorized)
 		return
 	}
 
-	remotePublicKeys := rp.NewRemoteKeySet(c, discoveryConfig.JwksURI)
-	accessTokenVerifier := op.NewAccessTokenVerifier(p.issuer, remotePublicKeys)
-	if _, err := op.VerifyAccessToken(r.Context(), token, accessTokenVerifier); err != nil {
+	remotePublicKeys := NewRemoteKeySet(c, discoveryConfig.JwksURI)
+	accessTokenVerifier := NewAccessTokenVerifier(p.issuer, remotePublicKeys)
+	if _, err := VerifyAccessToken(r.Context(), token, accessTokenVerifier); err != nil {
 		http.Error(w, errors.Wrap(err, ErrVerifyToken).Error(), http.StatusUnauthorized)
 		return
 	}
@@ -80,12 +76,12 @@ func getBearerToken(r *http.Request) (string, error) {
 		return "", ErrMissingAuthHeader
 	}
 
-	if !strings.HasPrefix(authHeader, strings.ToLower(oidc.PrefixBearer)) &&
-		!strings.HasPrefix(authHeader, oidc.PrefixBearer) {
+	if !strings.HasPrefix(authHeader, strings.ToLower(PrefixBearer)) &&
+		!strings.HasPrefix(authHeader, PrefixBearer) {
 		return "", ErrMalformedAuthHeader
 	}
 
-	token := strings.TrimPrefix(authHeader, strings.ToLower(oidc.PrefixBearer))
-	token = strings.TrimPrefix(token, oidc.PrefixBearer)
+	token := strings.TrimPrefix(authHeader, strings.ToLower(PrefixBearer))
+	token = strings.TrimPrefix(token, PrefixBearer)
 	return token, nil
 }

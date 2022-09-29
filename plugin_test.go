@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	gatewaypluginauth "github.com/formancehq/gateway-plugin-auth"
-	"github.com/formancehq/gateway-plugin-auth/pkg/oidc"
 	"github.com/oauth2-proxy/mockoidc"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +54,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		require.NoError(t, err)
 		recorder := httptest.NewRecorder()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
-		req.Header.Set("Authorization", oidc.PrefixBearer+"unverified")
+		req.Header.Set("Authorization", gatewaypluginauth.PrefixBearer+"unverified")
 		require.NoError(t, err)
 		handler.ServeHTTP(recorder, req)
 		require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -66,7 +65,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 	t.Run("ERR verify token", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
-		req.Header.Set("Authorization", oidc.PrefixBearer+"unverified")
+		req.Header.Set("Authorization", gatewaypluginauth.PrefixBearer+"unverified")
 		require.NoError(t, err)
 		handler.ServeHTTP(recorder, req)
 		require.Equal(t, http.StatusUnauthorized, recorder.Code)

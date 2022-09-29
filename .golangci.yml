@@ -4,13 +4,13 @@ linters:
     - gci
     - goimports
 
-  #presets:
+  presets:
   #  - bugs
   #  - comment
   #  - error
   #  - format
   #  - import
-  #  - unused
+    - unused
 
 run:
   timeout: 5m
