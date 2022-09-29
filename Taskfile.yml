@@ -31,11 +31,14 @@ tasks:
         sed ''/RUN/s//$(printf "\033[34mRUN\033[0m")/''
       - yaegi test -v .
 
-  install:
+  install:lint:
     cmds:
       - >
         curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh |
-        sh -s -- -b $(go env GOPATH)/bin latest
+        sudo sh -s -- -b $(go env GOPATH)/bin latest
+
+  install:yaegi:
+    cmds:
       - >
         curl -sfL https://raw.githubusercontent.com/traefik/yaegi/master/install.sh |
-        bash -s -- -b $(go env GOPATH)/bin latest
+        sudo bash -s -- -b $(go env GOPATH)/bin latest

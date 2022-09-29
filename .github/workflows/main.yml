@@ -16,9 +16,17 @@ jobs:
   lint:
     uses: formancehq/gh-workflows/.github/workflows/golang-lint.yml@main
 
-  install:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -sfL https://raw.githubusercontent.com/traefik/yaegi/master/install.sh | sudo bash -s -- -b $GOPATH/bin latest
-  test:
-    uses: formancehq/gh-workflows/.github/workflows/golang-test.yml@main
+      - name: Install task
+        uses: arduino/setup-task@v1
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Run tests
+        run: task install:yaegi tests
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
