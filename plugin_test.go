@@ -2,13 +2,17 @@ package gateway_plugin_auth
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/golang-jwt/jwt"
 )
 
 func TestPlugin_ServeHTTP(t *testing.T) {
@@ -17,24 +21,24 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		t.Error(err)
 	}
 
-	publicKeyBytes := []byte{}
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	publicKey := &privateKey.PublicKey
+
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.String() == discoveryEndpoint {
-			cfg := DiscoveryConfig{
+			cfg := discoveryConfig{
 				Issuer:  "http://" + l.Addr().String(),
 				JwksURI: "http://" + l.Addr().String() + "/keys",
 			}
 			by, _ := json.Marshal(cfg)
 			_, _ = w.Write(by)
 		} else if r.URL.String() == "/keys" {
-			keys := Keys{Keys: []Key{
+			keys := jsonWebKeySet{Keys: []jsonWebKey{
 				{
-					Use: "sig",
-					Kid: "id",
-					Kty: "RSA",
-					Alg: "RS256",
-					N:   base64.RawURLEncoding.EncodeToString(publicKeyBytes),
-					E:   "AQAB",
+					KeyID:     "id",
+					Key:       publicKey,
+					Algorithm: "HS256",
+					Use:       "sig",
 				},
 			}}
 			by, _ := json.Marshal(keys)
@@ -119,8 +123,43 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Error(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, ErrTokenVerification) {
+		if !strings.HasPrefix(b, "jwt.Parse") {
 			t.Error(b)
+		}
+	})
+
+	t.Run("verified token", func(t *testing.T) {
+		jwtToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.StandardClaims{
+			Issuer: l.Addr().String(),
+		})
+		jwtTokenString, err := jwtToken.SignedString(privateKey)
+		if err != nil {
+			t.Error(err)
+		}
+
+		token, err := jwt.Parse(jwtTokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return publicKey, nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if !token.Valid {
+			t.Error("invalid token")
+		}
+
+		recorder := httptest.NewRecorder()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+		req.Header.Set("Authorization", prefixBearer+jwtTokenString)
+		if err != nil {
+			t.Error(err)
+		}
+		handler.ServeHTTP(recorder, req)
+		b := recorder.Body.String()
+		if recorder.Code != http.StatusOK {
+			t.Error(recorder.Code, b)
 		}
 	})
 }
