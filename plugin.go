@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -141,26 +140,26 @@ type discoveryConfig struct {
 
 // rawJSONWebKey represents a public or private key in JWK format, used for parsing/serializing.
 type rawJSONWebKey struct {
-	Use string      `json:"use,omitempty"`
-	Kty string      `json:"kty,omitempty"`
-	Kid string      `json:"kid,omitempty"`
-	Crv string      `json:"crv,omitempty"`
-	Alg string      `json:"alg,omitempty"`
-	K   *byteBuffer `json:"k,omitempty"`
-	X   *byteBuffer `json:"x,omitempty"`
-	Y   *byteBuffer `json:"y,omitempty"`
-	N   *byteBuffer `json:"n,omitempty"`
-	E   *byteBuffer `json:"e,omitempty"`
+	Use string `json:"use,omitempty"`
+	Kty string `json:"kty,omitempty"`
+	Kid string `json:"kid,omitempty"`
+	Crv string `json:"crv,omitempty"`
+	Alg string `json:"alg,omitempty"`
+	K   []byte `json:"k,omitempty"`
+	X   []byte `json:"x,omitempty"`
+	Y   []byte `json:"y,omitempty"`
+	N   []byte `json:"n,omitempty"`
+	E   []byte `json:"e,omitempty"`
 	// -- Following fields are only used for private keys --
 	// RSA uses D, P and Q, while ECDSA uses only D. Fields Dp, Dq, and Qi are
 	// completely optional. Therefore for RSA/ECDSA, D != nil is a contract that
 	// we have a private key whereas D == nil means we have only a public key.
-	D  *byteBuffer `json:"d,omitempty"`
-	P  *byteBuffer `json:"p,omitempty"`
-	Q  *byteBuffer `json:"q,omitempty"`
-	Dp *byteBuffer `json:"dp,omitempty"`
-	Dq *byteBuffer `json:"dq,omitempty"`
-	Qi *byteBuffer `json:"qi,omitempty"`
+	D  []byte `json:"d,omitempty"`
+	P  []byte `json:"p,omitempty"`
+	Q  []byte `json:"q,omitempty"`
+	Dp []byte `json:"dp,omitempty"`
+	Dq []byte `json:"dq,omitempty"`
+	Qi []byte `json:"qi,omitempty"`
 	// Certificates
 	X5c       []string `json:"x5c,omitempty"`
 	X5u       *url.URL `json:"x5u,omitempty"`
@@ -285,10 +284,12 @@ func (k *jsonWebKey) UnmarshalJSON(data []byte) error {
 }
 
 func fromRsaPublicKey(pub *rsa.PublicKey) *rawJSONWebKey {
+	data := make([]byte, 8)
+	binary.BigEndian.PutUint64(data, uint64(pub.E))
 	return &rawJSONWebKey{
 		Kty: "RSA",
-		N:   newBuffer(pub.N.Bytes()),
-		E:   newBufferFromInt(uint64(pub.E)),
+		N:   pub.N.Bytes(),
+		E:   bytes.TrimLeft(data, "\x00"),
 	}
 }
 
@@ -298,73 +299,7 @@ func (key rawJSONWebKey) rsaPublicKey() (*rsa.PublicKey, error) {
 	}
 
 	return &rsa.PublicKey{
-		N: key.N.bigInt(),
-		E: key.E.toInt(),
+		N: new(big.Int).SetBytes(key.N),
+		E: int(new(big.Int).SetBytes(key.E).Int64()),
 	}, nil
-}
-
-// byteBuffer represents a slice of bytes that can be serialized to url-safe base64.
-type byteBuffer struct {
-	data []byte
-}
-
-func newBuffer(data []byte) *byteBuffer {
-	if data == nil {
-		return nil
-	}
-
-	return &byteBuffer{
-		data: data,
-	}
-}
-
-func newBufferFromInt(num uint64) *byteBuffer {
-	data := make([]byte, 8)
-	binary.BigEndian.PutUint64(data, num)
-	return newBuffer(bytes.TrimLeft(data, "\x00"))
-}
-
-func (b *byteBuffer) MarshalJSON() ([]byte, error) {
-	return json.Marshal(b.base64())
-}
-
-func (b *byteBuffer) UnmarshalJSON(data []byte) error {
-	var encoded string
-	err := json.Unmarshal(data, &encoded)
-	if err != nil {
-		return err
-	}
-
-	if encoded == "" {
-		return nil
-	}
-
-	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil {
-		return err
-	}
-
-	*b = *newBuffer(decoded)
-	return nil
-}
-
-func (b *byteBuffer) base64() string {
-	return base64.RawURLEncoding.EncodeToString(b.data)
-}
-
-func (b *byteBuffer) bytes() []byte {
-	// Handling nil here allows us to transparently handle nil slices when serializing.
-	if b == nil {
-		return nil
-	}
-
-	return b.data
-}
-
-func (b *byteBuffer) bigInt() *big.Int {
-	return new(big.Int).SetBytes(b.data)
-}
-
-func (b *byteBuffer) toInt() int {
-	return int(b.bigInt().Int64())
 }
