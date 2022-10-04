@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -11,29 +12,27 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt"
 )
 
-// Config the plugin configuration.
 type Config struct {
 	Issuer           string
+	SigningMethodRSA string
 	RefreshTimeError time.Duration
 	RefreshTime      time.Duration
 }
 
-// CreateConfig creates a new Config.
 func CreateConfig() *Config {
 	return &Config{}
 }
 
-// Plugin contains the runtime config.
 type Plugin struct {
 	next             http.Handler
 	issuer           string
+	signingMethodRSA *jwt.SigningMethodRSA
 	jwksURI          string
 	publicKey        *rsa.PublicKey
 	refreshTimeError time.Duration
@@ -45,13 +44,29 @@ const (
 	refreshTimeDefault      = 15 * time.Minute
 )
 
-// New creates a new Plugin
+var (
+	signingMethodDefault = jwt.SigningMethodRS256
+)
+
 func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
 	p := &Plugin{
 		next:             next,
 		issuer:           config.Issuer,
 		refreshTimeError: config.RefreshTimeError,
 		refreshTime:      config.RefreshTime,
+	}
+
+	switch config.SigningMethodRSA {
+	case "":
+		p.signingMethodRSA = signingMethodDefault
+	case jwt.SigningMethodRS256.Alg():
+		p.signingMethodRSA = jwt.SigningMethodRS256
+	case jwt.SigningMethodRS384.Alg():
+		p.signingMethodRSA = jwt.SigningMethodRS384
+	case jwt.SigningMethodRS512.Alg():
+		p.signingMethodRSA = jwt.SigningMethodRS512
+	default:
+		return nil, fmt.Errorf("unsupported config signing method: %s", config.SigningMethodRSA)
 	}
 
 	if p.refreshTimeError == 0 {
@@ -81,24 +96,45 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-
-		return p.publicKey, nil
-	})
+	parser := new(jwt.Parser)
+	token, parts, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
 	if err != nil {
-		http.Error(w, fmt.Errorf("jwt.Parse: %w", err).Error(), http.StatusUnauthorized)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	if !t.Valid {
-		http.Error(w, "invalid JWT token", http.StatusUnauthorized)
+	if token.Method.Alg() != p.signingMethodRSA.Alg() {
+		http.Error(w, fmt.Errorf("unsupported token signing method: %s", token.Method.Alg()).Error(), http.StatusUnauthorized)
+		return
+	}
+
+	vErr := &jwt.ValidationError{}
+	token.Signature = parts[2]
+	if err = verifyRSA(strings.Join(parts[0:2], "."), token.Signature, p.publicKey, p.signingMethodRSA); err != nil {
+		vErr.Inner = err
+		vErr.Errors |= jwt.ValidationErrorSignatureInvalid
+		http.Error(w, fmt.Errorf("unverified JWT token: %w", vErr).Error(), http.StatusUnauthorized)
 		return
 	}
 
 	p.next.ServeHTTP(w, r)
+}
+
+func verifyRSA(signingString, signature string, rsaKey *rsa.PublicKey, m *jwt.SigningMethodRSA) error {
+	var err error
+
+	var sig []byte
+	if sig, err = base64.RawURLEncoding.DecodeString(signature); err != nil {
+		return err
+	}
+
+	if !m.Hash.Available() {
+		return errors.New("the requested hash function is unavailable")
+	}
+	hasher := m.Hash.New()
+	hasher.Write([]byte(signingString))
+
+	return rsa.VerifyPKCS1v15(rsaKey, m.Hash, hasher.Sum(nil), sig)
 }
 
 func (p *Plugin) BackgroundRefresh() {
@@ -150,21 +186,9 @@ type rawJSONWebKey struct {
 	Y   []byte `json:"y,omitempty"`
 	N   []byte `json:"n,omitempty"`
 	E   []byte `json:"e,omitempty"`
-	// -- Following fields are only used for private keys --
-	// RSA uses D, P and Q, while ECDSA uses only D. Fields Dp, Dq, and Qi are
-	// completely optional. Therefore for RSA/ECDSA, D != nil is a contract that
-	// we have a private key whereas D == nil means we have only a public key.
-	D  []byte `json:"d,omitempty"`
-	P  []byte `json:"p,omitempty"`
-	Q  []byte `json:"q,omitempty"`
-	Dp []byte `json:"dp,omitempty"`
-	Dq []byte `json:"dq,omitempty"`
-	Qi []byte `json:"qi,omitempty"`
-	// Certificates
-	X5c       []string `json:"x5c,omitempty"`
-	X5u       *url.URL `json:"x5u,omitempty"`
-	X5tSHA1   string   `json:"x5t,omitempty"`
-	X5tSHA256 string   `json:"x5t#S256,omitempty"`
+	D   []byte `json:"d,omitempty"`
+	P   []byte `json:"p,omitempty"`
+	Q   []byte `json:"q,omitempty"`
 }
 
 // jsonWebKeySet represents a JWK Set object.
@@ -211,13 +235,20 @@ func (p *Plugin) fetchPublicKeys() error {
 		return errors.New("multiple public keys is not supported")
 	}
 
+	key := jwksKeys.Keys[0]
+	if key.Algorithm != jwt.SigningMethodRS256.Alg() {
+		return errors.New("only RS256 algorithm is supported")
+	}
+
+	if key.Use != "sig" {
+		return errors.New("only sig use is supported")
+	}
+
 	if cfg.Issuer != p.issuer {
 		return ErrIssuerInvalid
 	}
 
-	for _, key := range jwksKeys.Keys {
-		p.publicKey = key.Key
-	}
+	p.publicKey = key.Key
 
 	return nil
 }
@@ -251,7 +282,6 @@ type jsonWebKey struct {
 	Use string
 }
 
-// MarshalJSON serializes the given key to its JSON representation.
 func (k *jsonWebKey) MarshalJSON() ([]byte, error) {
 	var raw *rawJSONWebKey
 
@@ -263,7 +293,6 @@ func (k *jsonWebKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(raw)
 }
 
-// UnmarshalJSON reads a key from its JSON representation.
 func (k *jsonWebKey) UnmarshalJSON(data []byte) error {
 	var raw rawJSONWebKey
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -293,13 +322,13 @@ func fromRsaPublicKey(pub *rsa.PublicKey) *rawJSONWebKey {
 	}
 }
 
-func (key rawJSONWebKey) rsaPublicKey() (*rsa.PublicKey, error) {
-	if key.N == nil || key.E == nil {
+func (k rawJSONWebKey) rsaPublicKey() (*rsa.PublicKey, error) {
+	if k.N == nil || k.E == nil {
 		return nil, fmt.Errorf("invalid RSA key, missing n/e values")
 	}
 
 	return &rsa.PublicKey{
-		N: new(big.Int).SetBytes(key.N),
-		E: int(new(big.Int).SetBytes(key.E).Int64()),
+		N: new(big.Int).SetBytes(k.N),
+		E: int(new(big.Int).SetBytes(k.E).Int64()),
 	}, nil
 }
