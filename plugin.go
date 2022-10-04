@@ -84,7 +84,7 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 		case <-ctx.Done():
 			return nil, err
 		default:
-			if err := p.fetchPublicKeys(); err != nil {
+			if err := p.fetchPublicKeys(ctx); err != nil {
 				fmt.Printf("ERROR: Plugin.fetchPublicKeys (first): %s\n", err)
 				time.Sleep(p.refreshTimeError)
 			} else {
@@ -150,7 +150,7 @@ func (p *Plugin) backgroundRefresh(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			if err := p.fetchPublicKeys(); err != nil {
+			if err := p.fetchPublicKeys(ctx); err != nil {
 				fmt.Printf("ERROR: Plugin.fetchPublicKeys: %s\n", err)
 				time.Sleep(p.refreshTimeError)
 			} else {
@@ -207,8 +207,14 @@ type jsonWebKeySet struct {
 	Keys []jsonWebKey `json:"keys"`
 }
 
-func (p *Plugin) fetchPublicKeys() error {
-	response, err := http.Get(p.issuer + discoveryEndpoint)
+func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
+	c := http.DefaultClient
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.issuer+discoveryEndpoint, nil)
+	if err != nil {
+		return fmt.Errorf("new discovery request: %w", err)
+	}
+
+	response, err := c.Do(req)
 	if err != nil {
 		return fmt.Errorf("get discovery: %w", err)
 	}
@@ -227,7 +233,12 @@ func (p *Plugin) fetchPublicKeys() error {
 		return errors.New("could not fetch JWKS URI")
 	}
 
-	response, err = http.Get(cfg.JwksURI)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, cfg.JwksURI, nil)
+	if err != nil {
+		return fmt.Errorf("new jwks request: %w", err)
+	}
+
+	response, err = c.Do(req)
 	if err != nil {
 		return fmt.Errorf("get jwks: %w", err)
 	}
