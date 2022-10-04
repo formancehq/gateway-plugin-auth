@@ -1,4 +1,4 @@
-# gateway-plugin-auth ![Build](https://github.com/formancehq/gateway-plugin-auth/workflows/build/badge.svg)
+# gateway-plugin-auth
 Traefik plugin for verifying JSON Web Tokens (JWT). Supports JWKS endpoints.
 Only supports RSA signing algorithms. Supports JWK endpoints for fetching keys remotely.
 

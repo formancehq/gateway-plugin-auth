@@ -66,7 +66,9 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 	case jwt.SigningMethodRS512.Alg():
 		p.signingMethodRSA = jwt.SigningMethodRS512
 	default:
-		return nil, fmt.Errorf("unsupported config signing method: %s", config.SigningMethodRSA)
+		err := fmt.Errorf("ERROR: unsupported config signing method: %s", config.SigningMethodRSA)
+		fmt.Println(err)
+		return nil, err
 	}
 
 	if p.refreshTimeError == 0 {
@@ -78,19 +80,19 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 
 	for {
 		if err := p.fetchPublicKeys(); err != nil {
-			fmt.Printf("ERR FIRST FETCH PUBLIC KEYS: %s\n", err)
+			fmt.Printf("ERROR: Plugin.fetchPublicKeys (first): %s\n", err)
 			time.Sleep(p.refreshTimeError)
 		} else {
 			break
 		}
 	}
 
-	go p.BackgroundRefresh()
+	go p.backgroundRefresh()
 	return p, nil
 }
 
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tokenString, err := p.ExtractToken(r)
+	tokenString, err := p.extractToken(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -137,11 +139,11 @@ func verifyRSA(signingString, signature string, rsaKey *rsa.PublicKey, m *jwt.Si
 	return rsa.VerifyPKCS1v15(rsaKey, m.Hash, hasher.Sum(nil), sig)
 }
 
-func (p *Plugin) BackgroundRefresh() {
+func (p *Plugin) backgroundRefresh() {
 	time.Sleep(p.refreshTime)
 	for {
 		if err := p.fetchPublicKeys(); err != nil {
-			fmt.Printf("ERR FETCH PUBLIC KEYS: %s\n", err)
+			fmt.Printf("ERROR: Plugin.fetchPublicKeys: %s\n", err)
 			time.Sleep(p.refreshTimeError)
 		} else {
 			time.Sleep(p.refreshTime)
@@ -253,7 +255,7 @@ func (p *Plugin) fetchPublicKeys() error {
 	return nil
 }
 
-func (p *Plugin) ExtractToken(request *http.Request) (string, error) {
+func (p *Plugin) extractToken(request *http.Request) (string, error) {
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
 		return "", ErrHeaderAuthMissing
