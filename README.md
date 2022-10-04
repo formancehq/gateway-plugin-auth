@@ -1,10 +1,6 @@
-# gateway-plugin-auth ![Build](https://github.com/formancehq/gateway-plugin-auth/workflows/build/badge.svg)
+# gateway-plugin-auth
 Traefik plugin for verifying JSON Web Tokens (JWT). Supports JWKS endpoints.
-Supports RSA, ECDSA and symmetric keys.
-
-Features:
-* RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, ES512, HS256, HS384, HS512
-* Supports JWK endpoints for fetching keys remotely
+Only supports RSA signing algorithms. Supports JWK endpoints for fetching keys remotely.
 
 ## Installation
 The plugin needs to be configured in the Traefik static configuration before it can be used.
@@ -38,6 +34,9 @@ The plugin currently supports the following configuration settings: (all fields 
 Name | Description
 --- | ---
 Issuer | Used to verify the issuer of the JWT
+SigningMethodRSA | RSA signing method used to verify tokens (defaults to RS256)
+RefreshTime | Refresh time of discovery (defaults to 15m)
+RefreshTimeError | Refresh time of discovery in case of error (defaults to 10s)
 
 ## Example configuration
 This example uses Kubernetes Custom Resource Descriptors (CRD) :
@@ -50,6 +49,9 @@ spec:
   plugin:
     jwt:
       Issuer: http://localhost/api/auth
+      SigningMethodRSA: RS256
+      RefreshTime: 15m
+      RefreshTimeError: 10s
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

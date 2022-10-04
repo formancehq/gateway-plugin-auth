@@ -25,8 +25,8 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version-file: 'go.mod'
-      - name: Prepare tests
-        run: go mod tidy && go mod vendor
+      - run: go mod vendor
+      - run: go get github.com/golang-jwt/jwt
       - name: Run tests
         run: task install:yaegi tests
       - name: Upload coverage to Codecov
