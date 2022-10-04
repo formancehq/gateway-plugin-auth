@@ -48,7 +48,8 @@ var (
 	signingMethodDefault = jwt.SigningMethodRS256
 )
 
-func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
+func New(ctx context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
+	var err error
 	p := &Plugin{
 		next:             next,
 		issuer:           config.Issuer,
@@ -79,16 +80,19 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 	}
 
 	for {
-		if err := p.fetchPublicKeys(); err != nil {
-			fmt.Printf("ERROR: Plugin.fetchPublicKeys (first): %s\n", err)
-			time.Sleep(p.refreshTimeError)
-		} else {
-			break
+		select {
+		case <-ctx.Done():
+			return nil, err
+		default:
+			if err := p.fetchPublicKeys(); err != nil {
+				fmt.Printf("ERROR: Plugin.fetchPublicKeys (first): %s\n", err)
+				time.Sleep(p.refreshTimeError)
+			} else {
+				go p.backgroundRefresh(ctx)
+				return p, nil
+			}
 		}
 	}
-
-	go p.backgroundRefresh()
-	return p, nil
 }
 
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -139,14 +143,19 @@ func verifyRSA(signingString, signature string, rsaKey *rsa.PublicKey, m *jwt.Si
 	return rsa.VerifyPKCS1v15(rsaKey, m.Hash, hasher.Sum(nil), sig)
 }
 
-func (p *Plugin) backgroundRefresh() {
+func (p *Plugin) backgroundRefresh(ctx context.Context) {
 	time.Sleep(p.refreshTime)
 	for {
-		if err := p.fetchPublicKeys(); err != nil {
-			fmt.Printf("ERROR: Plugin.fetchPublicKeys: %s\n", err)
-			time.Sleep(p.refreshTimeError)
-		} else {
-			time.Sleep(p.refreshTime)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if err := p.fetchPublicKeys(); err != nil {
+				fmt.Printf("ERROR: Plugin.fetchPublicKeys: %s\n", err)
+				time.Sleep(p.refreshTimeError)
+			} else {
+				time.Sleep(p.refreshTime)
+			}
 		}
 	}
 }
