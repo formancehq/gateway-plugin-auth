@@ -69,7 +69,7 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 	default:
 		err := fmt.Errorf("ERROR: unsupported config signing method: %s", config.SigningMethodRSA)
 		fmt.Println(err)
-		return nil, err
+		return p, err
 	}
 
 	if p.refreshTimeError == 0 {
@@ -82,7 +82,7 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, err
+			return p, err
 		default:
 			if err := p.fetchPublicKeys(ctx); err != nil {
 				fmt.Printf("ERROR: Plugin.fetchPublicKeys (first): %s\n", err)

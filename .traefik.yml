@@ -6,4 +6,4 @@ import: github.com/formancehq/gateway-plugin-auth
 summary: 'Formance Gateway Auth'
 
 testData:
-  issuer: https://auth.example.com
+  Issuer: https://auth.example.com
