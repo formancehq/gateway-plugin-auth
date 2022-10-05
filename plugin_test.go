@@ -26,6 +26,9 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 	}
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
 	publicKey := &privateKey.PublicKey
 
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,19 +48,13 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 					Kid: "id",
 					Alg: signingMethodDefault.Alg(),
 					Use: "sig",
-					N:   publicKey.N.Bytes(),
-					E:   bytes.TrimLeft(data, "\x00"),
+					N:   base64.RawURLEncoding.EncodeToString(publicKey.N.Bytes()),
+					E:   base64.RawURLEncoding.EncodeToString(bytes.TrimLeft(data, "\x00")),
 				},
 			}}
-			by, err := json.Marshal(keys)
-			if err != nil {
+			if err := json.NewEncoder(w).Encode(keys); err != nil {
 				t.Fatal(err)
 			}
-			_, err = w.Write(by)
-			if err != nil {
-				t.Fatal(err)
-			}
-			fmt.Printf("KEYS: %s\n", string(by))
 		}
 	}))
 
@@ -133,6 +130,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		<-handler.(*Plugin).Initialized()
 		handler.ServeHTTP(recorder, req)
 		if recorder.Code != http.StatusUnauthorized {
 			t.Fatal(recorder.Code)

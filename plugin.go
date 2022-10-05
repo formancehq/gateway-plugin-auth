@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net/http"
 	"strings"
@@ -35,6 +34,7 @@ type Plugin struct {
 	publicKey        *rsa.PublicKey
 	refreshTimeError time.Duration
 	refreshTime      time.Duration
+	initialized      chan struct{}
 }
 
 const (
@@ -47,13 +47,12 @@ var (
 )
 
 func New(ctx context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
-	fmt.Printf("NEW WITH CONFIG: %+v\n", config)
-	var err error
 	p := &Plugin{
 		next:             next,
 		issuer:           config.Issuer,
 		refreshTimeError: config.RefreshTimeError,
 		refreshTime:      config.RefreshTime,
+		initialized:      make(chan struct{}),
 	}
 
 	switch config.SigningMethodRSA {
@@ -78,25 +77,41 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 		p.refreshTime = refreshTimeDefault
 	}
 
+	go p.fetchKeys(ctx)
+
+	return p, nil
+}
+
+func (p *Plugin) Initialized() chan struct{} {
+	return p.initialized
+}
+
+func (p *Plugin) fetchKeys(ctx context.Context) {
 	for {
+		if err := p.fetchPublicKeys(ctx); err == nil {
+			if p.initialized != nil {
+				close(p.initialized)
+				p.initialized = nil
+			}
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(p.refreshTime):
+					continue
+				}
+			}
+		}
 		select {
 		case <-ctx.Done():
-			return p, err
-		default:
-			if err := p.fetchPublicKeys(ctx); err != nil {
-				fmt.Printf("ERROR: Plugin.fetchPublicKeys (first): %s\n", err)
-				time.Sleep(p.refreshTimeError)
-			} else {
-				go p.backgroundRefresh(ctx)
-				fmt.Printf("NEW WITH PLUGIN: %+v\n", p)
-				return p, nil
-			}
+			return
+		case <-time.After(p.refreshTimeError):
+			continue
 		}
 	}
 }
 
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("NEW REQUEST: %+v\n", r)
 	tokenString, err := p.extractToken(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -120,12 +135,10 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err = verifyRSA(strings.Join(parts[0:2], "."), token.Signature, p.publicKey, p.signingMethodRSA); err != nil {
 		vErr.Inner = err
 		vErr.Errors |= jwt.ValidationErrorSignatureInvalid
-		fmt.Printf("UNVERIFIED TOKEN\n")
 		http.Error(w, fmt.Errorf("unverified JWT token: %w", vErr).Error(), http.StatusUnauthorized)
 		return
 	}
 
-	fmt.Printf("VERIFIED TOKEN\n")
 	p.next.ServeHTTP(w, r)
 }
 
@@ -143,23 +156,6 @@ func verifyRSA(signingString, signature string, rsaKey *rsa.PublicKey, m *jwt.Si
 	h.Write([]byte(signingString))
 
 	return rsa.VerifyPKCS1v15(rsaKey, m.Hash, h.Sum(nil), sig)
-}
-
-func (p *Plugin) backgroundRefresh(ctx context.Context) {
-	time.Sleep(p.refreshTime)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if err := p.fetchPublicKeys(ctx); err != nil {
-				fmt.Printf("ERROR: Plugin.fetchPublicKeys (refresh): %s\n", err)
-				time.Sleep(p.refreshTimeError)
-			} else {
-				time.Sleep(p.refreshTime)
-			}
-		}
-	}
 }
 
 const (
@@ -187,17 +183,10 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		return fmt.Errorf("get discovery: %w", err)
 	}
 
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return fmt.Errorf("ioutil.ReadAll discovery: %w", err)
-	}
-
-	fmt.Printf("DISCOVERY BODY: %s\n", string(body))
 	var cfg discoveryConfig
-	if err = json.Unmarshal(body, &cfg); err != nil {
+	if err = json.NewDecoder(response.Body).Decode(&cfg); err != nil {
 		return fmt.Errorf("json.Unmarshal discovery: %w", err)
 	}
-	fmt.Printf("DISCOVERY UNMARSHAL: %+v\n", cfg)
 
 	if cfg.Issuer != p.issuer {
 		return ErrIssuerInvalid
@@ -217,17 +206,10 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		return fmt.Errorf("get jwks: %w", err)
 	}
 
-	body, err = ioutil.ReadAll(response.Body)
-	if err != nil {
-		return fmt.Errorf("ioutil.ReadAll jwks: %w", err)
-	}
-
-	fmt.Printf("JWKS BODY: %s\n", string(body))
 	var jwksKeys jsonWebKeySet
-	if err = json.Unmarshal(body, &jwksKeys); err != nil {
+	if err = json.NewDecoder(response.Body).Decode(&jwksKeys); err != nil {
 		return fmt.Errorf("json.Unmarshal jwks: %w", err)
 	}
-	fmt.Printf("JWKS UNMARSHAL: %+v\n", jwksKeys)
 
 	if len(jwksKeys.Keys) > 1 {
 		return errors.New("multiple public keys is not supported")
@@ -246,13 +228,23 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		return fmt.Errorf("unknown json web key type '%s'", key.Kty)
 	}
 
-	if key.N == nil || key.E == nil {
+	if key.N == "" || key.E == "" {
 		return fmt.Errorf("invalid RSA key, missing n/e values")
 	}
 
+	nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
+	if err != nil {
+		return err
+	}
+
+	eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
+	if err != nil {
+		return err
+	}
+
 	p.publicKey = &rsa.PublicKey{
-		N: new(big.Int).SetBytes(key.N),
-		E: int(new(big.Int).SetBytes(key.E).Int64()),
+		N: new(big.Int).SetBytes(nBytes),
+		E: int(new(big.Int).SetBytes(eBytes).Int64()),
 	}
 	return nil
 }
@@ -295,12 +287,12 @@ type jsonWebKey struct {
 	Kid string `json:"kid,omitempty"`
 	Crv string `json:"crv,omitempty"`
 	Alg string `json:"alg,omitempty"`
-	K   []byte `json:"k,omitempty"`
-	X   []byte `json:"x,omitempty"`
-	Y   []byte `json:"y,omitempty"`
-	N   []byte `json:"n,omitempty"`
-	E   []byte `json:"e,omitempty"`
-	D   []byte `json:"d,omitempty"`
-	P   []byte `json:"p,omitempty"`
-	Q   []byte `json:"q,omitempty"`
+	K   string `json:"k,omitempty"`
+	X   string `json:"x,omitempty"`
+	Y   string `json:"y,omitempty"`
+	N   string `json:"n,omitempty"`
+	E   string `json:"e,omitempty"`
+	D   string `json:"d,omitempty"`
+	P   string `json:"p,omitempty"`
+	Q   string `json:"q,omitempty"`
 }
