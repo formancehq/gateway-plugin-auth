@@ -1,11 +1,9 @@
 package gateway_plugin_auth
 
 import (
-	"bytes"
 	"context"
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -201,6 +199,10 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 	}
 	fmt.Printf("DISCOVERY UNMARSHAL: %+v\n", cfg)
 
+	if cfg.Issuer != p.issuer {
+		return ErrIssuerInvalid
+	}
+
 	if cfg.JwksURI == "" {
 		return errors.New("could not fetch JWKS URI")
 	}
@@ -232,7 +234,7 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 	}
 
 	key := jwksKeys.Keys[0]
-	if key.Algorithm != jwt.SigningMethodRS256.Alg() {
+	if key.Alg != jwt.SigningMethodRS256.Alg() {
 		return errors.New("only RS256 algorithm is supported")
 	}
 
@@ -240,11 +242,18 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		return errors.New("only sig use is supported")
 	}
 
-	if cfg.Issuer != p.issuer {
-		return ErrIssuerInvalid
+	if key.Kty != "RSA" {
+		return fmt.Errorf("unknown json web key type '%s'", key.Kty)
 	}
 
-	p.publicKey = key.Key
+	if key.N == nil || key.E == nil {
+		return fmt.Errorf("invalid RSA key, missing n/e values")
+	}
+
+	p.publicKey = &rsa.PublicKey{
+		N: new(big.Int).SetBytes(key.N),
+		E: int(new(big.Int).SetBytes(key.E).Int64()),
+	}
 	return nil
 }
 
@@ -274,25 +283,13 @@ type discoveryConfig struct {
 	JwksURI string `json:"jwks_uri,omitempty"`
 }
 
-// jsonWebKey represents a public or private key in JWK format.
-type jsonWebKey struct {
-	// Cryptographic key, asymmetric key.
-	Key *rsa.PublicKey
-	// Key identifier, parsed from `kid` header.
-	KeyID string
-	// Key algorithm, parsed from `alg` header.
-	Algorithm string
-	// Key use, parsed from `use` header.
-	Use string
-}
-
 // jsonWebKeySet represents a JWK Set object.
 type jsonWebKeySet struct {
 	Keys []jsonWebKey `json:"keys"`
 }
 
-// rawJSONWebKey represents a public or private key in JWK format, used for parsing/serializing.
-type rawJSONWebKey struct {
+// jsonWebKey represents a public or private key in JWK format, used for parsing/serializing.
+type jsonWebKey struct {
 	Use string `json:"use,omitempty"`
 	Kty string `json:"kty,omitempty"`
 	Kid string `json:"kid,omitempty"`
@@ -306,44 +303,4 @@ type rawJSONWebKey struct {
 	D   []byte `json:"d,omitempty"`
 	P   []byte `json:"p,omitempty"`
 	Q   []byte `json:"q,omitempty"`
-}
-
-func (k *jsonWebKey) MarshalJSON() ([]byte, error) {
-	fmt.Printf("jsonWebKey CUSTOM MARSHAL\n")
-	data := make([]byte, 8)
-	binary.BigEndian.PutUint64(data, uint64(k.Key.E))
-	raw := &rawJSONWebKey{
-		Kty: "RSA",
-		Kid: k.KeyID,
-		Alg: k.Algorithm,
-		Use: k.Use,
-		N:   k.Key.N.Bytes(),
-		E:   bytes.TrimLeft(data, "\x00"),
-	}
-
-	return json.Marshal(raw)
-}
-
-func (k *jsonWebKey) UnmarshalJSON(data []byte) error {
-	fmt.Printf("jsonWebKey CUSTOM UNMARSHAL\n")
-	var raw rawJSONWebKey
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-
-	if raw.Kty != "RSA" {
-		return fmt.Errorf("unknown json web key type '%s'", raw.Kty)
-	}
-
-	if raw.N == nil || raw.E == nil {
-		return fmt.Errorf("invalid RSA key, missing n/e values")
-	}
-
-	key := &rsa.PublicKey{
-		N: new(big.Int).SetBytes(raw.N),
-		E: int(new(big.Int).SetBytes(raw.E).Int64()),
-	}
-
-	*k = jsonWebKey{Key: key, KeyID: raw.Kid, Algorithm: raw.Alg, Use: raw.Use}
-	return nil
 }

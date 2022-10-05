@@ -1,10 +1,12 @@
 package gateway_plugin_auth
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,17 +37,27 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			by, _ := json.Marshal(cfg)
 			_, _ = w.Write(by)
 		} else if r.URL.String() == "/keys" {
+			data := make([]byte, 8)
+			binary.BigEndian.PutUint64(data, uint64(publicKey.E))
 			keys := jsonWebKeySet{Keys: []jsonWebKey{
 				{
-					KeyID:     "id",
-					Key:       publicKey,
-					Algorithm: signingMethodDefault.Alg(),
-					Use:       "sig",
+					Kty: "RSA",
+					Kid: "id",
+					Alg: signingMethodDefault.Alg(),
+					Use: "sig",
+					N:   publicKey.N.Bytes(),
+					E:   bytes.TrimLeft(data, "\x00"),
 				},
 			}}
-			by, _ := json.Marshal(keys)
-			fmt.Printf("KEYS:%s\n", string(by))
-			_, _ = w.Write(by)
+			by, err := json.Marshal(keys)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = w.Write(by)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fmt.Printf("KEYS: %s\n", string(by))
 		}
 	}))
 
