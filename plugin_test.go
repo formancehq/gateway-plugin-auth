@@ -44,6 +44,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 				},
 			}}
 			by, _ := json.Marshal(keys)
+			fmt.Printf("KEYS:%s\n", string(by))
 			_, _ = w.Write(by)
 		}
 	}))
