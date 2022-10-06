@@ -26,8 +26,5 @@ jobs:
         with:
           go-version-file: 'go.mod'
       - run: go mod vendor
-      - run: go get github.com/golang-jwt/jwt
       - name: Run tests
         run: task install:yaegi tests
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3

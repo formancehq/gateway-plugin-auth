@@ -26,6 +26,9 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 	}
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
 	publicKey := &privateKey.PublicKey
 
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,19 +48,13 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 					Kid: "id",
 					Alg: signingMethodDefault.Alg(),
 					Use: "sig",
-					N:   publicKey.N.Bytes(),
-					E:   bytes.TrimLeft(data, "\x00"),
+					N:   base64.RawURLEncoding.EncodeToString(publicKey.N.Bytes()),
+					E:   base64.RawURLEncoding.EncodeToString(bytes.TrimLeft(data, "\x00")),
 				},
 			}}
-			by, err := json.Marshal(keys)
-			if err != nil {
+			if err := json.NewEncoder(w).Encode(keys); err != nil {
 				t.Fatal(err)
 			}
-			_, err = w.Write(by)
-			if err != nil {
-				t.Fatal(err)
-			}
-			fmt.Printf("KEYS: %s\n", string(by))
 		}
 	}))
 
@@ -86,7 +83,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, ErrHeaderAuthMissing.Error()) {
+		if !strings.HasPrefix(b, "extracting bearer token: missing") {
 			t.Fatal(b)
 		}
 	})
@@ -103,7 +100,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, ErrHeaderAuthMalformed.Error()) {
+		if !strings.HasPrefix(b, "extracting bearer token: malformed") {
 			t.Fatal(b)
 		}
 	})
@@ -120,16 +117,16 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, ErrTokenInvalidFormat) {
+		if !strings.HasPrefix(b, "extracting bearer token: invalid") {
 			t.Fatal(b)
 		}
 	})
 
 	t.Run("ERR unverified token", func(t *testing.T) {
-		invalidToken := "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.NHVaYe26MbtOYhSKkoKYdFVomg4i8ZJd8_-RU8VNbftc4TSMb4bXP3l3YlNWACwyXPGffz5aXHc6lty1Y2t4SWRqGteragsVdZufDn5BlnJl9pdR_kdVFUsra2rWKEofkZeIC4yWytE58sMIihvo9H1ScmmVwBcQP6XETqYd0aSHp1gOa9RdUPDvoXQ5oqygTqVtxaDr6wUFKrKItgBMzWIdNZ6y7O9E0DhEPTbE9rfBo6KTFsHAZnMg4k68CDp2woYIaXbmYTWcvbzIuHO7_37GT79XdIwkm95QJ7hYC9RiwrV7mesbY4PAahERJawntho0my942XheVLmGwLMBkQ"
+		unverifiedToken := "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.NHVaYe26MbtOYhSKkoKYdFVomg4i8ZJd8_-RU8VNbftc4TSMb4bXP3l3YlNWACwyXPGffz5aXHc6lty1Y2t4SWRqGteragsVdZufDn5BlnJl9pdR_kdVFUsra2rWKEofkZeIC4yWytE58sMIihvo9H1ScmmVwBcQP6XETqYd0aSHp1gOa9RdUPDvoXQ5oqygTqVtxaDr6wUFKrKItgBMzWIdNZ6y7O9E0DhEPTbE9rfBo6KTFsHAZnMg4k68CDp2woYIaXbmYTWcvbzIuHO7_37GT79XdIwkm95QJ7hYC9RiwrV7mesbY4PAahERJawntho0my942XheVLmGwLMBkQ"
 		recorder := httptest.NewRecorder()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
-		req.Header.Set("Authorization", prefixBearer+invalidToken)
+		req.Header.Set("Authorization", prefixBearer+unverifiedToken)
 		if err != nil {
 			t.Fatal(err)
 		}
