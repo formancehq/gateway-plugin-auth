@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt"
 )
@@ -85,7 +86,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "extracting bearer token: missing") {
+		if !strings.HasPrefix(b, "extracted bearer token: missing") {
 			t.Fatal(b)
 		}
 	})
@@ -102,7 +103,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "extracting bearer token: malformed") {
+		if !strings.HasPrefix(b, "extracted bearer token: malformed") {
 			t.Fatal(b)
 		}
 	})
@@ -119,7 +120,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "extracting bearer token: invalid") {
+		if !strings.HasPrefix(b, "extracted bearer token: invalid") {
 			t.Fatal(b)
 		}
 	})
@@ -142,9 +143,51 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		}
 	})
 
+	t.Run("ERR expired token", func(t *testing.T) {
+		jwtToken := jwt.NewWithClaims(signingMethodDefault, jwt.StandardClaims{
+			Issuer:    l.Addr().String(),
+			ExpiresAt: time.Now().Add(-10 * time.Hour).Unix(),
+		})
+
+		jwtTokenString, err := signedString(jwtToken, privateKey, signingMethodDefault)
+		if err != nil {
+			t.Fatal(fmt.Errorf("signedString: %w", err))
+		}
+
+		parser := new(jwt.Parser)
+		token, parts, err := parser.ParseUnverified(jwtTokenString, jwt.MapClaims{})
+		if err != nil {
+			t.Fatal(fmt.Errorf("parser.ParseUnverified: %w", err))
+		}
+
+		vErr := &jwt.ValidationError{}
+		token.Signature = parts[2]
+		if err = verifyRSA(strings.Join(parts[0:2], "."), token.Signature, publicKey, signingMethodDefault); err != nil {
+			vErr.Inner = err
+			vErr.Errors |= jwt.ValidationErrorSignatureInvalid
+			t.Fatal(fmt.Errorf("verifyRSA: %w", err))
+		}
+
+		recorder := httptest.NewRecorder()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+		req.Header.Set("Authorization", prefixBearer+jwtTokenString)
+		if err != nil {
+			t.Fatal(err)
+		}
+		handler.ServeHTTP(recorder, req)
+		b := recorder.Body.String()
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatal(recorder.Code, b)
+		}
+		if !strings.HasPrefix(b, "unvalid bearer token claims: token is expired by") {
+			t.Fatal(b)
+		}
+	})
+
 	t.Run("verified token", func(t *testing.T) {
 		jwtToken := jwt.NewWithClaims(signingMethodDefault, jwt.StandardClaims{
-			Issuer: l.Addr().String(),
+			Issuer:    l.Addr().String(),
+			ExpiresAt: time.Now().Add(time.Hour).Unix(),
 		})
 
 		jwtTokenString, err := signedString(jwtToken, privateKey, signingMethodDefault)

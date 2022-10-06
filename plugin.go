@@ -1,6 +1,7 @@
 package gateway_plugin_auth
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"encoding/base64"
@@ -105,6 +106,7 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 	}
 }
 
+/*
 func (p *Plugin) backgroundRefresh(ctx context.Context) {
 	fmt.Printf("REFRESH WITH PLUGIN: %+v\n", p)
 	select {
@@ -134,19 +136,26 @@ func (p *Plugin) backgroundRefresh(ctx context.Context) {
 		}
 	}
 }
+*/
 
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("REQUEST: %+v\n", r)
 	tokenString, err := p.extractToken(r)
 	if err != nil {
-		http.Error(w, fmt.Errorf("extracting bearer token: %w", err).Error(), http.StatusUnauthorized)
+		http.Error(w, fmt.Errorf("extracted bearer token: %w", err).Error(), http.StatusUnauthorized)
 		return
 	}
 
+	claims := &jwt.StandardClaims{}
 	parser := new(jwt.Parser)
-	token, parts, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
+	token, parts, err := parseUnverified(tokenString, claims, parser)
 	if err != nil {
-		http.Error(w, fmt.Errorf("parsing bearer token: %w", err).Error(), http.StatusUnauthorized)
+		http.Error(w, fmt.Errorf("parsed bearer token: %w", err).Error(), http.StatusUnauthorized)
+		return
+	}
+
+	if err := claims.Valid(); err != nil {
+		http.Error(w, fmt.Errorf("unvalid bearer token claims: %w", err).Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -262,7 +271,7 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		return err
 	}
 
-	oldPub := &rsa.PublicKey{}
+	var oldPub *rsa.PublicKey
 	if p.publicKey != nil {
 		oldPub = p.publicKey
 	}
@@ -272,7 +281,7 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		E: int(new(big.Int).SetBytes(eBytes).Int64()),
 	}
 
-	if p.publicKey != nil && oldPub.Equal(p.publicKey) {
+	if oldPub != nil && p.publicKey != nil && oldPub.Equal(p.publicKey) {
 		fmt.Printf("FETCH PUBLIC KEY: public key changed: %+v\n", p.publicKey)
 	} else {
 		fmt.Printf("FETCH PUBLIC KEY: %+v\n", p.publicKey)
@@ -296,6 +305,55 @@ func (p *Plugin) extractToken(request *http.Request) (string, error) {
 	}
 
 	return auth[len(prefixBearer):], nil
+}
+
+func parseUnverified(tokenString string, claims *jwt.StandardClaims, p *jwt.Parser) (token *jwt.Token, parts []string, err error) {
+	parts = strings.Split(tokenString, ".")
+	if len(parts) != 3 {
+		return nil, parts, jwt.NewValidationError("token contains an invalid number of segments", jwt.ValidationErrorMalformed)
+	}
+
+	token = &jwt.Token{Raw: tokenString}
+
+	// parse Header
+	var headerBytes []byte
+	if headerBytes, err = jwt.DecodeSegment(parts[0]); err != nil {
+		if strings.HasPrefix(strings.ToLower(tokenString), "bearer ") {
+			return token, parts, jwt.NewValidationError("tokenstring should not contain 'bearer '", jwt.ValidationErrorMalformed)
+		}
+		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
+	}
+	if err = json.Unmarshal(headerBytes, &token.Header); err != nil {
+		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
+	}
+
+	// parse Claims
+	var claimBytes []byte
+	token.Claims = claims
+
+	if claimBytes, err = jwt.DecodeSegment(parts[1]); err != nil {
+		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
+	}
+	dec := json.NewDecoder(bytes.NewBuffer(claimBytes))
+	if p.UseJSONNumber {
+		dec.UseNumber()
+	}
+	err = dec.Decode(&claims)
+	// Handle decode error
+	if err != nil {
+		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
+	}
+
+	// Lookup signature method
+	if method, ok := token.Header["alg"].(string); ok {
+		if token.Method = jwt.GetSigningMethod(method); token.Method == nil {
+			return token, parts, jwt.NewValidationError("signing method (alg) is unavailable.", jwt.ValidationErrorUnverifiable)
+		}
+	} else {
+		return token, parts, jwt.NewValidationError("signing method (alg) is unspecified.", jwt.ValidationErrorUnverifiable)
+	}
+
+	return token, parts, nil
 }
 
 type discoveryConfig struct {
