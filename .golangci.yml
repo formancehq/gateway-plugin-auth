@@ -4,14 +4,5 @@ linters:
     - gci
     - goimports
 
-  disable:
-    - errcheck
-    - gosimple
-    - ineffassign
-    - staticcheck
-    - unparam
-    - unused
-    - deadcode
-
 run:
   timeout: 5m
