@@ -18,8 +18,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    env:
-      GOPATH: $GITHUB_ACTION_PATH
     steps:
       - name: Install task
         uses: arduino/setup-task@v1
