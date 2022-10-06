@@ -18,8 +18,8 @@ import (
 type Config struct {
 	Issuer           string
 	SigningMethodRSA string
-	RefreshTimeError time.Duration
-	RefreshTime      time.Duration
+	RefreshTimeError string
+	RefreshTime      string
 }
 
 func CreateConfig() *Config {
@@ -46,11 +46,10 @@ var (
 
 func New(ctx context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
 	fmt.Printf("NEW CONFIG: %+v\n", config)
+
 	p := &Plugin{
-		next:             next,
-		issuer:           config.Issuer,
-		refreshTimeError: config.RefreshTimeError,
-		refreshTime:      config.RefreshTime,
+		next:   next,
+		issuer: config.Issuer,
 	}
 
 	switch config.SigningMethodRSA {
@@ -68,23 +67,37 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 		return p, err
 	}
 
-	if p.refreshTimeError == 0 {
+	if config.RefreshTimeError == "" {
 		p.refreshTimeError = refreshTimeErrorDefault
+	} else {
+		rtErr, err := time.ParseDuration(config.RefreshTimeError)
+		if err != nil {
+			return p, fmt.Errorf("parsing refresh time error: %w", err)
+		}
+		p.refreshTimeError = rtErr
 	}
-	if p.refreshTime == 0 {
+
+	if config.RefreshTime == "" {
 		p.refreshTime = refreshTimeDefault
+	} else {
+		rt, err := time.ParseDuration(config.RefreshTime)
+		if err != nil {
+			return p, fmt.Errorf("parsing refresh time: %w", err)
+		}
+		p.refreshTime = rt
 	}
 
 	for {
 		if err := p.fetchPublicKeys(ctx); err != nil {
 			fmt.Printf("ERROR: Plugin.fetchPublicKeys: %s\n", err)
 		} else {
-			go p.backgroundRefresh(ctx)
+			//go p.backgroundRefresh(ctx)
 			fmt.Printf("NEW PLUGIN: %+v\n", p)
 			return p, nil
 		}
 		select {
 		case <-ctx.Done():
+			fmt.Printf("NEW PLUGIN: context done\n")
 			return p, nil
 		case <-time.After(p.refreshTimeError):
 			continue
@@ -93,24 +106,27 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 }
 
 func (p *Plugin) backgroundRefresh(ctx context.Context) {
+	fmt.Printf("REFRESH WITH PLUGIN: %+v\n", p)
 	select {
 	case <-ctx.Done():
+		fmt.Printf("REFRESH: context done\n")
 		return
 	case <-time.After(p.refreshTime):
 	}
 	for {
 		if err := p.fetchPublicKeys(ctx); err != nil {
-			fmt.Printf("ERROR: Plugin.fetchPublicKeys: %s\n", err)
+			fmt.Printf("REFRESH ERROR: Plugin.fetchPublicKeys: %s\n", err)
 			select {
 			case <-ctx.Done():
+				fmt.Printf("REFRESH: context done error\n")
 				return
 			case <-time.After(p.refreshTimeError):
 				continue
 			}
 		} else {
-			fmt.Printf("SUCCESS: Plugin.fetchPublicKeys\n")
 			select {
 			case <-ctx.Done():
+				fmt.Printf("REFRESH: context done success\n")
 				return
 			case <-time.After(p.refreshTime):
 				continue
@@ -120,6 +136,7 @@ func (p *Plugin) backgroundRefresh(ctx context.Context) {
 }
 
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("REQUEST: %+v\n", r)
 	tokenString, err := p.extractToken(r)
 	if err != nil {
 		http.Error(w, fmt.Errorf("extracting bearer token: %w", err).Error(), http.StatusUnauthorized)
@@ -144,9 +161,11 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		vErr.Inner = err
 		vErr.Errors |= jwt.ValidationErrorSignatureInvalid
 		http.Error(w, fmt.Errorf("unverified JWT token: %w", vErr).Error(), http.StatusUnauthorized)
+		fmt.Printf("UNVERIFIED TOKEN: %+v\n", token)
 		return
 	}
 
+	fmt.Printf("VERIFIED TOKEN: %+v\n", token)
 	p.next.ServeHTTP(w, r)
 }
 
@@ -243,10 +262,22 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		return err
 	}
 
+	oldPub := &rsa.PublicKey{}
+	if p.publicKey != nil {
+		oldPub = p.publicKey
+	}
+
 	p.publicKey = &rsa.PublicKey{
 		N: new(big.Int).SetBytes(nBytes),
 		E: int(new(big.Int).SetBytes(eBytes).Int64()),
 	}
+
+	if p.publicKey != nil && oldPub.Equal(p.publicKey) {
+		fmt.Printf("FETCH PUBLIC KEY: public key changed: %+v\n", p.publicKey)
+	} else {
+		fmt.Printf("FETCH PUBLIC KEY: %+v\n", p.publicKey)
+	}
+
 	return nil
 }
 

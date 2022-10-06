@@ -16,16 +16,16 @@ experimental:
     enabled: true
 
 additionalArguments:
-- --experimental.plugins.jwt.moduleName=github.com/formancehq/gateway-plugin-auth
-- --experimental.plugins.jwt.version=v0.1.0
+- --experimental.plugins.gateway-plugin.moduleName=github.com/formancehq/gateway-plugin-auth
+- --experimental.plugins.gateway-plugin.version=v0.1.0
 ```
 
 ### Installation via command line
 ```
 traefik \
   --experimental.pilot.token=xxxx-xxxx-xxx \
-  --experimental.plugins.jwt.moduleName=github.com/formancehq/gateway-plugin-auth \
-  --experimental.plugins.jwt.version=v0.1.0
+  --experimental.plugins.gateway-plugin.moduleName=github.com/formancehq/gateway-plugin-auth \
+  --experimental.plugins.gateway-plugin.version=v0.1.0
 ```
 
 ## Configuration
@@ -44,10 +44,10 @@ This example uses Kubernetes Custom Resource Descriptors (CRD) :
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: jwt
+  name: gateway-plugin
 spec:
   plugin:
-    jwt:
+    gateway-plugin:
       Issuer: http://localhost/api/auth
       SigningMethodRSA: RS256
       RefreshTime: 15m

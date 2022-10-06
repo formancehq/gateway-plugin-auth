@@ -1,9 +1,10 @@
-displayName: Formance Gateway Auth
+displayName: Formance Gateway Plugin Auth
+
 type: middleware
 
 import: github.com/formancehq/gateway-plugin-auth
 
-summary: 'Formance Gateway Auth'
+summary: 'Formance Gateway Plugin Auth'
 
 testData:
   Issuer: https://auth.example.com

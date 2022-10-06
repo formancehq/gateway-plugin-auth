@@ -67,6 +67,8 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	config := CreateConfig()
 	config.Issuer = "http://" + l.Addr().String()
+	config.RefreshTimeError = "5s"
+	config.RefreshTime = "5s"
 	handler, err := New(ctx, next, config, "")
 	if err != nil {
 		t.Fatal(err)
