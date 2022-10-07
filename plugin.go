@@ -158,7 +158,7 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) validateToken(tokenString string) error {
-	claims := &jwt.StandardClaims{}
+	claims := &jwt.MapClaims{}
 	parser := new(jwt.Parser)
 	token, parts, err := parseUnverified(tokenString, claims, parser)
 	if err != nil {
@@ -310,7 +310,7 @@ func (p *Plugin) extractToken(request *http.Request) (string, error) {
 	return auth[len(prefixBearer):], nil
 }
 
-func parseUnverified(tokenString string, claims *jwt.StandardClaims, p *jwt.Parser) (token *jwt.Token, parts []string, err error) {
+func parseUnverified(tokenString string, claims *jwt.MapClaims, p *jwt.Parser) (token *jwt.Token, parts []string, err error) {
 	parts = strings.Split(tokenString, ".")
 	token = &jwt.Token{Raw: tokenString}
 

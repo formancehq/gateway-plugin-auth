@@ -179,7 +179,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		if recorder.Code != http.StatusUnauthorized {
 			t.Fatal(recorder.Code, b)
 		}
-		if !strings.HasPrefix(b, "unvalid bearer token claims: token is expired by") {
+		if !strings.HasPrefix(b, "unvalid bearer token claims: Token is expired") {
 			t.Fatal(b)
 		}
 	})
