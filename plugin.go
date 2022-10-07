@@ -88,47 +88,37 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 		p.refreshTime = rt
 	}
 
-	for {
-		if err := p.fetchPublicKeys(ctx); err != nil {
-			fmt.Printf("ERROR: Plugin.fetchPublicKeys: %s\n", err)
-		} else {
-			//go p.backgroundRefresh(ctx)
-			fmt.Printf("NEW PLUGIN: %+v\n", p)
-			return p, nil
-		}
-		select {
-		case <-ctx.Done():
-			fmt.Printf("NEW PLUGIN: context done\n")
-			return p, nil
-		case <-time.After(p.refreshTimeError):
-			continue
-		}
+	if err := p.fetchPublicKeys(ctx); err != nil {
+		return p, fmt.Errorf("fetchPublicKeys: %w", err)
 	}
+
+	go p.backgroundRefreshPublicKeys(ctx)
+	return p, nil
 }
 
-/*
-func (p *Plugin) backgroundRefresh(ctx context.Context) {
-	fmt.Printf("REFRESH WITH PLUGIN: %+v\n", p)
+func (p *Plugin) backgroundRefreshPublicKeys(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		fmt.Printf("REFRESH: context done\n")
+		fmt.Printf("backgroundRefreshPublicKeys: context done\n")
 		return
 	case <-time.After(p.refreshTime):
 	}
+
 	for {
 		if err := p.fetchPublicKeys(ctx); err != nil {
-			fmt.Printf("REFRESH ERROR: Plugin.fetchPublicKeys: %s\n", err)
+			fmt.Printf("backgroundRefreshPublicKeys: ERROR: %s\n", err)
 			select {
 			case <-ctx.Done():
-				fmt.Printf("REFRESH: context done error\n")
+				fmt.Printf("backgroundRefreshPublicKeys: ERROR: context done\n")
 				return
 			case <-time.After(p.refreshTimeError):
 				continue
 			}
 		} else {
+			fmt.Printf("backgroundRefreshPublicKeys: SUCCESS\n")
 			select {
 			case <-ctx.Done():
-				fmt.Printf("REFRESH: context done success\n")
+				fmt.Printf("backgroundRefreshPublicKeys: SUCCESS: context done\n")
 				return
 			case <-time.After(p.refreshTime):
 				continue
@@ -136,32 +126,51 @@ func (p *Plugin) backgroundRefresh(ctx context.Context) {
 		}
 	}
 }
-*/
 
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("REQUEST: %+v\n", r)
-	tokenString, err := p.extractToken(r)
+	token, err := p.extractToken(r)
 	if err != nil {
-		http.Error(w, fmt.Errorf("extracted bearer token: %w", err).Error(), http.StatusUnauthorized)
+		err := fmt.Errorf("bearer token: %w", err)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
+	if err := p.validateToken(token); err != nil {
+		// Force refresh public keys and try filtering the request again
+		if err := p.fetchPublicKeys(r.Context()); err != nil {
+			fmt.Printf("force refresh public keys: ERROR: %s\n", err)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		fmt.Printf("force refresh public keys: SUCCESS\n")
+
+		if err := p.validateToken(token); err == nil {
+			p.next.ServeHTTP(w, r)
+			return
+		}
+
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	p.next.ServeHTTP(w, r)
+}
+
+func (p *Plugin) validateToken(tokenString string) error {
 	claims := &jwt.StandardClaims{}
 	parser := new(jwt.Parser)
 	token, parts, err := parseUnverified(tokenString, claims, parser)
 	if err != nil {
-		http.Error(w, fmt.Errorf("parsed bearer token: %w", err).Error(), http.StatusUnauthorized)
-		return
+		return fmt.Errorf("parsed bearer token: %w", err)
 	}
 
 	if err := claims.Valid(); err != nil {
-		http.Error(w, fmt.Errorf("unvalid bearer token claims: %w", err).Error(), http.StatusUnauthorized)
-		return
+		return fmt.Errorf("unvalid bearer token claims: %w", err)
 	}
 
 	if token.Method.Alg() != p.signingMethodRSA.Alg() {
-		http.Error(w, fmt.Errorf("unsupported token signing method: %s", token.Method.Alg()).Error(), http.StatusUnauthorized)
-		return
+		return fmt.Errorf("unsupported token signing method: %s", token.Method.Alg())
 	}
 
 	vErr := &jwt.ValidationError{}
@@ -169,13 +178,10 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err = verifyRSA(strings.Join(parts[0:2], "."), token.Signature, p.publicKey, p.signingMethodRSA); err != nil {
 		vErr.Inner = err
 		vErr.Errors |= jwt.ValidationErrorSignatureInvalid
-		http.Error(w, fmt.Errorf("unverified JWT token: %w", vErr).Error(), http.StatusUnauthorized)
-		fmt.Printf("UNVERIFIED TOKEN: %+v\n", token)
-		return
+		return fmt.Errorf("unverified JWT token: %w", vErr)
 	}
 
-	fmt.Printf("VERIFIED TOKEN: %+v\n", token)
-	p.next.ServeHTTP(w, r)
+	return nil
 }
 
 func verifyRSA(signingString, signature string, rsaKey *rsa.PublicKey, m *jwt.SigningMethodRSA) error {
@@ -271,17 +277,14 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 		return err
 	}
 
-	var oldPub *rsa.PublicKey
-	if p.publicKey != nil {
-		oldPub = p.publicKey
-	}
+	oldPub := p.publicKey
 
 	p.publicKey = &rsa.PublicKey{
 		N: new(big.Int).SetBytes(nBytes),
 		E: int(new(big.Int).SetBytes(eBytes).Int64()),
 	}
 
-	if oldPub != nil && p.publicKey != nil && oldPub.Equal(p.publicKey) {
+	if oldPub != nil && p.publicKey != nil && !oldPub.Equal(p.publicKey) {
 		fmt.Printf("FETCH PUBLIC KEY: public key changed: %+v\n", p.publicKey)
 	} else {
 		fmt.Printf("FETCH PUBLIC KEY: %+v\n", p.publicKey)
@@ -301,7 +304,7 @@ func (p *Plugin) extractToken(request *http.Request) (string, error) {
 	}
 	parts := strings.Split(auth[len(prefixBearer):], ".")
 	if len(parts) != 3 {
-		return "", fmt.Errorf("invalid token format: should have 3 parts")
+		return "", fmt.Errorf("invalid format: should have 3 parts")
 	}
 
 	return auth[len(prefixBearer):], nil
@@ -309,42 +312,32 @@ func (p *Plugin) extractToken(request *http.Request) (string, error) {
 
 func parseUnverified(tokenString string, claims *jwt.StandardClaims, p *jwt.Parser) (token *jwt.Token, parts []string, err error) {
 	parts = strings.Split(tokenString, ".")
-	if len(parts) != 3 {
-		return nil, parts, jwt.NewValidationError("token contains an invalid number of segments", jwt.ValidationErrorMalformed)
-	}
-
 	token = &jwt.Token{Raw: tokenString}
 
-	// parse Header
 	var headerBytes []byte
 	if headerBytes, err = jwt.DecodeSegment(parts[0]); err != nil {
-		if strings.HasPrefix(strings.ToLower(tokenString), "bearer ") {
-			return token, parts, jwt.NewValidationError("tokenstring should not contain 'bearer '", jwt.ValidationErrorMalformed)
-		}
 		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
 	}
 	if err = json.Unmarshal(headerBytes, &token.Header); err != nil {
 		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
 	}
 
-	// parse Claims
-	var claimBytes []byte
 	token.Claims = claims
 
+	var claimBytes []byte
 	if claimBytes, err = jwt.DecodeSegment(parts[1]); err != nil {
 		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
 	}
+
 	dec := json.NewDecoder(bytes.NewBuffer(claimBytes))
 	if p.UseJSONNumber {
 		dec.UseNumber()
 	}
-	err = dec.Decode(&claims)
-	// Handle decode error
-	if err != nil {
+
+	if err := dec.Decode(&claims); err != nil {
 		return token, parts, &jwt.ValidationError{Inner: err, Errors: jwt.ValidationErrorMalformed}
 	}
 
-	// Lookup signature method
 	if method, ok := token.Header["alg"].(string); ok {
 		if token.Method = jwt.GetSigningMethod(method); token.Method == nil {
 			return token, parts, jwt.NewValidationError("signing method (alg) is unavailable.", jwt.ValidationErrorUnverifiable)

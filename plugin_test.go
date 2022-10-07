@@ -86,7 +86,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "extracted bearer token: missing") {
+		if !strings.HasPrefix(b, "bearer token: missing") {
 			t.Fatal(b)
 		}
 	})
@@ -103,7 +103,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "extracted bearer token: malformed") {
+		if !strings.HasPrefix(b, "bearer token: malformed") {
 			t.Fatal(b)
 		}
 	})
@@ -120,7 +120,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(recorder.Code)
 		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "extracted bearer token: invalid") {
+		if !strings.HasPrefix(b, "bearer token: invalid") {
 			t.Fatal(b)
 		}
 	})
