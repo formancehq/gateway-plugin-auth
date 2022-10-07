@@ -88,11 +88,11 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 		p.refreshTime = rt
 	}
 
+	go p.backgroundRefreshPublicKeys(ctx)
 	if err := p.fetchPublicKeys(ctx); err != nil {
-		return p, fmt.Errorf("fetchPublicKeys: %w", err)
+		fmt.Printf("fetchPublicKeys: ERROR: %s\n", err)
 	}
 
-	go p.backgroundRefreshPublicKeys(ctx)
 	return p, nil
 }
 
