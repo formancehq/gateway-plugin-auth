@@ -82,12 +82,9 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 		handler.ServeHTTP(recorder, req)
-		if recorder.Code != http.StatusUnauthorized {
-			t.Fatal(recorder.Code)
-		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "bearer token: missing") {
-			t.Fatal(b)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatal(recorder.Code, b)
 		}
 	})
 
@@ -99,12 +96,9 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 		handler.ServeHTTP(recorder, req)
-		if recorder.Code != http.StatusUnauthorized {
-			t.Fatal(recorder.Code)
-		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "bearer token: malformed") {
-			t.Fatal(b)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatal(recorder.Code, b)
 		}
 	})
 
@@ -116,12 +110,9 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 		handler.ServeHTTP(recorder, req)
-		if recorder.Code != http.StatusUnauthorized {
-			t.Fatal(recorder.Code)
-		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "bearer token: invalid") {
-			t.Fatal(b)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatal(recorder.Code, b)
 		}
 	})
 
@@ -134,12 +125,9 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 		handler.ServeHTTP(recorder, req)
-		if recorder.Code != http.StatusUnauthorized {
-			t.Fatal(recorder.Code)
-		}
 		b := recorder.Body.String()
-		if !strings.HasPrefix(b, "unverified JWT token") {
-			t.Fatal(b)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatal(recorder.Code, b)
 		}
 	})
 
@@ -178,9 +166,6 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		b := recorder.Body.String()
 		if recorder.Code != http.StatusUnauthorized {
 			t.Fatal(recorder.Code, b)
-		}
-		if !strings.HasPrefix(b, "unvalid bearer token claims: Token is expired") {
-			t.Fatal(b)
 		}
 	})
 

@@ -131,8 +131,8 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("REQUEST: %+v\n", r)
 	token, err := p.extractToken(r)
 	if err != nil {
-		err := fmt.Errorf("bearer token: %w", err)
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		fmt.Printf("Plugin.extractToken: %s", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
@@ -140,18 +140,16 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Force refresh public keys and try filtering the request again
 		if err := p.fetchPublicKeys(r.Context()); err != nil {
 			fmt.Printf("force refresh public keys: ERROR: %s\n", err)
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
 		fmt.Printf("force refresh public keys: SUCCESS\n")
 
-		if err := p.validateToken(token); err == nil {
-			p.next.ServeHTTP(w, r)
+		if err := p.validateToken(token); err != nil {
+			fmt.Printf("Plugin.validateToken: %s", err)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
-
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
 	}
 
 	p.next.ServeHTTP(w, r)
