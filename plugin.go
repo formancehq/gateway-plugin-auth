@@ -128,6 +128,7 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := p.validateToken(token); err != nil {
+		fmt.Printf("error validating token: %s\r\n", err)
 		// Force refresh public keys and try filtering the request again
 		if err := p.fetchPublicKeys(r.Context()); err != nil {
 			fmt.Printf("force refresh public keys: ERROR: %s\n", err)
@@ -137,6 +138,7 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("force refresh public keys: SUCCESS\n")
 
 		if err := p.validateToken(token); err == nil {
+			fmt.Printf("error validating token after refresh: %s\r\n", err)
 			p.next.ServeHTTP(w, r)
 			return
 		}
