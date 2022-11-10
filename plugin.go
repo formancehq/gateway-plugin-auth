@@ -34,6 +34,7 @@ type Plugin struct {
 	publicKey        *rsa.PublicKey
 	refreshTimeError time.Duration
 	refreshTime      time.Duration
+	ready            chan struct{}
 }
 
 const (
@@ -51,6 +52,7 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 	p := &Plugin{
 		next:   next,
 		issuer: config.Issuer,
+		ready:  make(chan struct{}),
 	}
 
 	switch config.SigningMethodRSA {
@@ -89,40 +91,29 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 	}
 
 	go p.backgroundRefreshPublicKeys(ctx)
-	if err := p.fetchPublicKeys(ctx); err != nil {
-		fmt.Printf("fetchPublicKeys: ERROR: %s\n", err)
-	}
 
 	return p, nil
 }
 
 func (p *Plugin) backgroundRefreshPublicKeys(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-		fmt.Printf("backgroundRefreshPublicKeys: context done\n")
-		return
-	case <-time.After(p.refreshTime):
-	}
-
 	for {
 		if err := p.fetchPublicKeys(ctx); err != nil {
-			fmt.Printf("backgroundRefreshPublicKeys: ERROR: %s\n", err)
 			select {
 			case <-ctx.Done():
-				fmt.Printf("backgroundRefreshPublicKeys: ERROR: context done\n")
 				return
 			case <-time.After(p.refreshTimeError):
 				continue
 			}
-		} else {
-			fmt.Printf("backgroundRefreshPublicKeys: SUCCESS\n")
-			select {
-			case <-ctx.Done():
-				fmt.Printf("backgroundRefreshPublicKeys: SUCCESS: context done\n")
-				return
-			case <-time.After(p.refreshTime):
-				continue
-			}
+		}
+		select {
+		case <-p.ready:
+		default:
+			close(p.ready)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(p.refreshTime):
 		}
 	}
 }

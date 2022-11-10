@@ -74,6 +74,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	<-handler.(*Plugin).ready
 
 	t.Run("ERR missing header", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
