@@ -18,8 +18,12 @@ tasks:
 
   tests:
     cmds:
+      - docker build -t yaegi .
       - go test -race -coverpkg {{.PKG}} -coverprofile coverage.out {{.PKG}}
-      - yaegi test .
+      - >-
+        docker run --rm 
+        -v $(pwd):/go/src/github.com/formancehq/gateway-plugin-auth 
+        -w /go/src/github.com/formancehq/gateway-plugin-auth yaegi test .
 
   tests:local:
     cmds:
