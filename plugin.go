@@ -21,6 +21,7 @@ type Config struct {
 	SigningMethodRSA string
 	RefreshTimeError string
 	RefreshTime      string
+	ExcludePaths     []string
 }
 
 func CreateConfig() *Config {
@@ -35,6 +36,7 @@ type Plugin struct {
 	refreshTimeError time.Duration
 	refreshTime      time.Duration
 	ready            chan struct{}
+	excludePaths     []string
 }
 
 const (
@@ -46,13 +48,18 @@ var (
 	signingMethodDefault = jwt.SigningMethodRS256
 )
 
+func log(format string, args ...any) {
+	fmt.Printf(format+"\n", args...)
+}
+
 func New(ctx context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
-	fmt.Printf("NEW CONFIG: %+v\n", config)
+	log("NEW CONFIG: %+v", config)
 
 	p := &Plugin{
-		next:   next,
-		issuer: config.Issuer,
-		ready:  make(chan struct{}),
+		next:         next,
+		issuer:       config.Issuer,
+		ready:        make(chan struct{}),
+		excludePaths: config.ExcludePaths,
 	}
 
 	switch config.SigningMethodRSA {
@@ -66,7 +73,7 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 		p.signingMethodRSA = jwt.SigningMethodRS512
 	default:
 		err := fmt.Errorf("ERROR: unsupported config signing method: %s", config.SigningMethodRSA)
-		fmt.Println(err)
+		log("%s", err)
 		return p, err
 	}
 
@@ -96,31 +103,54 @@ func New(ctx context.Context, next http.Handler, config *Config, _ string) (http
 }
 
 func (p *Plugin) backgroundRefreshPublicKeys(ctx context.Context) {
+l:
 	for {
 		if err := p.fetchPublicKeys(ctx); err != nil {
+			log("Error fetching public keys: %s, retry after %s", err, p.refreshTimeError.String())
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.refreshTimeError):
-				continue
+				continue l
 			}
-		}
-		select {
-		case <-p.ready:
-		default:
-			close(p.ready)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(p.refreshTime):
+		} else {
+			select {
+			case <-p.ready:
+			default:
+				close(p.ready)
+			}
+			log("Refresh ok, will retry in %s", p.refreshTime.String())
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(p.refreshTime):
+			}
 		}
 	}
 }
 
+func (p *Plugin) isExcluded(r *http.Request) bool {
+	for _, excludedPath := range p.excludePaths {
+		if r.URL.Path == excludedPath {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	fmt.Printf("REQUEST: %+v\n", r)
+	log("REQUEST: %+v", r)
+	if p.isExcluded(r) {
+		p.next.ServeHTTP(w, r)
+		return
+	}
+
+	if p.publicKey == nil {
+		http.Error(w, "not yet available...", http.StatusServiceUnavailable)
+		return
+	}
+
 	token, err := p.extractToken(r)
 	if err != nil {
 		err := fmt.Errorf("bearer token: %w", err)
@@ -129,17 +159,17 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := p.validateToken(token); err != nil {
-		fmt.Printf("error validating token: %s\r\n", err)
+		log("Error validating token: %s", err)
 		// Force refresh public keys and try filtering the request again
 		if err := p.fetchPublicKeys(r.Context()); err != nil {
-			fmt.Printf("force refresh public keys: ERROR: %s\n", err)
+			log("force refresh public keys: ERROR: %s", err)
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		fmt.Printf("force refresh public keys: SUCCESS\n")
+		log("force refresh public keys: SUCCESS")
 
 		if err := p.validateToken(token); err == nil {
-			fmt.Printf("error validating token after refresh: %s\r\n", err)
+			log("error validating token after refresh: %s", err)
 			p.next.ServeHTTP(w, r)
 			return
 		}
@@ -169,6 +199,7 @@ func (p *Plugin) validateToken(tokenString string) error {
 
 	vErr := &jwt.ValidationError{}
 	token.Signature = parts[2]
+
 	if err = verifyRSA(strings.Join(parts[0:2], "."), token.Signature, p.publicKey, p.signingMethodRSA); err != nil {
 		vErr.Inner = err
 		vErr.Errors |= jwt.ValidationErrorSignatureInvalid
@@ -181,6 +212,7 @@ func (p *Plugin) validateToken(tokenString string) error {
 func verifyRSA(signingString, signature string, rsaKey *rsa.PublicKey, m *jwt.SigningMethodRSA) error {
 	var err error
 	var sig []byte
+
 	if sig, err = base64.RawURLEncoding.DecodeString(signature); err != nil {
 		return fmt.Errorf("base64.RawURLEncoding.DecodeString: %w", err)
 	}
@@ -201,6 +233,7 @@ const (
 )
 
 func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
+	log("Fetch public keys from server: %s", p.issuer+discoveryEndpoint)
 	c := http.DefaultClient
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.issuer+discoveryEndpoint, nil)
 	if err != nil {
@@ -279,9 +312,9 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 	}
 
 	if oldPub != nil && p.publicKey != nil && !oldPub.Equal(p.publicKey) {
-		fmt.Printf("FETCH PUBLIC KEY: public key changed: %+v\n", p.publicKey)
+		log("FETCH PUBLIC KEY: public key changed: %+v", p.publicKey)
 	} else {
-		fmt.Printf("FETCH PUBLIC KEY: %+v\n", p.publicKey)
+		log("FETCH PUBLIC KEY: %+v", p.publicKey)
 	}
 
 	return nil

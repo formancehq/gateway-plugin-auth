@@ -1,0 +1,55 @@
+---
+services:
+  postgres:
+    image: postgres:alpine
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U auth']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_USER: 'auth'
+      POSTGRES_PASSWORD: 'auth'
+      POSTGRES_DB: 'auth'
+    network_mode: service:traefik
+
+  auth:
+    image: ghcr.io/formancehq/auth:d98177365db91fd98fca9701b4d0d4ed5a405dea
+    volumes:
+    - ./config/auth.yml:/auth.yml
+    environment:
+      LISTEN: ":9999"
+      CONFIG: /auth.yml
+      BASE_URL: http://localhost:9999
+      DELEGATED_CLIENT_ID: "unknown"
+      DELEGATED_CLIENT_SECRET: "unknown"
+      DELEGATED_ISSUER: https://accounts.google.com
+      POSTGRES_URI: host=127.0.0.1 user=auth password=auth dbname=auth port=5432 sslmode=disable
+      CAOS_OIDC_DEV: 1
+      DEBUG: 1
+    command:
+    - serve
+    network_mode: service:traefik
+    depends_on:
+    - traefik
+
+  whoami:
+    image: traefik/whoami
+    network_mode: service:traefik
+    depends_on:
+    - traefik
+    environment:
+      WHOAMI_PORT_NUMBER: "10000"
+
+  traefik:
+    image: traefik:v2.9.4
+    volumes:
+    - ./config/traefik.yml:/etc/traefik/traefik.yml
+    - ./config/traefik-dynamic.yml:/etc/traefik/dynamic/dynamic.yml
+    - .:/wd/plugins-local/src/github.com/formancehq/gateway-plugin-auth
+    working_dir: /wd
+    ports:
+    - 9999:9999
+    - 8080:8080
+    - 5432:5432
+    - 80:80

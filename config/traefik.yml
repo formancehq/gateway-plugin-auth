@@ -1,0 +1,23 @@
+## traefik.yml
+
+# Docker configuration backend
+providers:
+  file:
+    directory: "/etc/traefik/dynamic"
+
+# API and dashboard configuration
+api:
+  insecure: true
+  dashboard: true
+
+entryPoints:
+  web:
+    address: :80
+
+log:
+  level: DEBUG
+
+experimental:
+  localPlugins:
+    auth-plugin:
+      moduleName: github.com/formancehq/gateway-plugin-auth
