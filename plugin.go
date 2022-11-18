@@ -119,6 +119,7 @@ func (p *Plugin) backgroundRefreshPublicKeys(ctx context.Context) {
 }
 
 func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
 	fmt.Printf("REQUEST: %+v\n", r)
 	token, err := p.extractToken(r)
 	if err != nil {
