@@ -1,0 +1,25 @@
+# Dynamic configuration
+
+http:
+  routers:
+    my-router:
+      rule: host(`localhost`)
+      service: service-whoami
+      entryPoints:
+      - web
+      middlewares:
+      - auth-plugin
+
+  services:
+    service-whoami:
+      loadBalancer:
+        servers:
+        - url: http://localhost:10000
+
+  middlewares:
+    auth-plugin:
+      plugin:
+        auth-plugin:
+          issuer: http://localhost:9999
+          excludePaths:
+          - /health
