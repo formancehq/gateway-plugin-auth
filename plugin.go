@@ -244,6 +244,7 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get discovery: %w", err)
 	}
+	defer response.Body.Close()
 
 	var cfg discoveryConfig
 	if err = json.NewDecoder(response.Body).Decode(&cfg); err != nil {
@@ -267,6 +268,7 @@ func (p *Plugin) fetchPublicKeys(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get jwks: %w", err)
 	}
+	defer response.Body.Close()
 
 	var jwksKeys jsonWebKeySet
 	if err = json.NewDecoder(response.Body).Decode(&jwksKeys); err != nil {
